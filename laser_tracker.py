@@ -85,7 +85,7 @@ from mycobot_laser_aim import (
     pointing_error_deg,
 )
 
-from PU_detection_couleur import detecterObjet
+from PU_detection_couleur import detecterObjet, libererCamera
 
 log = logging.getLogger("tracker")
 
@@ -429,6 +429,12 @@ class LaserTracker:
         if self._owns_aimer:
             self._aimer.disconnect()
 
+        # Libération de la caméra OpenCV
+        try:
+            libererCamera()
+        except Exception as e:
+            log.debug("Libération caméra : %s", e)
+
         log.info("Tracker arrêté.")
         log.info("Stats finales : %s", self.stats.summary())
 
@@ -569,12 +575,54 @@ if __name__ == "__main__":
     import sys
 
     # ── ADAPTE ICI ──────────────────────────────────────────────────────────
+    #
+    # T_source2robot : transformation homogène 4×4
+    #   repère SOURCE (caméra) → repère BASE du robot
+    #
+    # Situation physique :
+    #   • Caméra fixe, vue de dessus, à 460 mm au-dessus de la table
+    #   • Le robot est posé sur la table
+    #   • La caméra est approximativement au-dessus de la zone de travail
+    #
+    # Repère CAMÉRA (retourné par detecterObjet) :
+    #   X_cam : vers la droite de l'image
+    #   Y_cam : vers le bas de l'image
+    #   Z_cam : vers le bas (= 460 mm, distance caméra→table) — fixe
+    #
+    # Repère ROBOT (base myCobot280) :
+    #   X_rob : vers l'avant du robot
+    #   Y_rob : vers la gauche du robot
+    #   Z_rob : vers le haut
+    #
+    # Pour une caméra au-dessus regardant vers le bas :
+    #   X_cam  →  X_rob  (ou -X_rob selon orientation physique)
+    #   Y_cam  → -Y_rob  (image Y vers le bas, robot Y vers le haut)
+    #   Z_cam  → -Z_rob  (caméra Z vers le bas, robot Z vers le haut)
+    #
+    # La translation [tx, ty, tz] est le décalage entre l'axe optique
+    # de la caméra et la base du robot, mesuré dans le repère robot (mm).
+    #
+    # ⚠️  VALEURS À MESURER SUR TA VRAIE INSTALLATION :
+    #   tx = décalage X entre axe caméra et base robot (mm)
+    #   ty = décalage Y entre axe caméra et base robot (mm)
+    #   tz = 0  (la table est le plan Z=0 du robot, caméra au-dessus)
+    #
+    # Exemple ci-dessous : caméra centrée au-dessus du robot,
+    # légèrement décalée de 50 mm en avant (X) et 0 mm en Y.
+    # Remplace tx/ty par tes mesures réelles.
+    #
+    tx = 50.0   # ← MESURE : décalage X axe-optique → base robot (mm)
+    ty = 0.0    # ← MESURE : décalage Y axe-optique → base robot (mm)
+    tz = 0.0    # table = plan Z=0 du robot
+
     T_source2robot = np.array([
-        [1, 0, 0, 300],
-        [0, 1, 0,   0],
-        [0, 0, 1, -100],
-        [0, 0, 0,   1],
+        [ 1,  0,  0,  tx],   # X_cam → X_rob
+        [ 0, -1,  0,  ty],   # Y_cam → -Y_rob (image inversée vs robot)
+        [ 0,  0, -1,  tz],   # Z_cam → -Z_rob (bas vs haut)
+        [ 0,  0,  0,   1],
     ], dtype=float)
+    #
+    # ── FIN ADAPTE ICI ──────────────────────────────────────────────────────
 
     robot_cfg = RobotConfig(
         port="/dev/ttyTHS1",
@@ -627,7 +675,7 @@ if __name__ == "__main__":
             time.sleep(1.0 / 25)
             raw   = detecterObjet()
             now   = time.time(); dt = now - last_t; last_t = now
-            raw_r = transform_point(T_source2robot, np.array(raw))
+            raw_r = transform_point(T_source2robot, np.array([raw[0], raw[1], raw[2]]))
 
             if pred_mode == PredictionMode.KALMAN:
                 filt = kalman.update(raw_r, dt)
