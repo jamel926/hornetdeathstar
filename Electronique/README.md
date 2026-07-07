@@ -26,7 +26,7 @@ Le raccordement entre la tête M5ATOM du myCobot 280, la carte PCB et le laser s
 
 | Broche myCobot | Fonction | Connexion sur le PCB | Destination Finale |
 | :--- | :--- | :--- | :--- |
-| **3V3** | Alimentation positive | Entrée VCC |
+| **3V3** | Alimentation positive | Entrée VCC | Pôle (+) du Laser |
 | **GND** | Masse / Terre | Entrée Masse | Pôle (-) du Laser (via transistor) |
 | **G33** | Commande GPIO | Entrée Signal / Target | Commande de l'interrupteur électronique |
 
