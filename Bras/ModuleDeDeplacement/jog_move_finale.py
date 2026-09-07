@@ -66,106 +66,106 @@ SPEED = 20
 # 3. FONCTION DE SÉCURITÉ (CLAMP)
 # =========================================================
 def clamp(value, min_value, max_value):
-"""
-Empêche une valeur de dépasser les limites autorisées.
+    """
+    Empêche une valeur de dépasser les limites autorisées.
 
-Pourquoi c'est important ?
---------------------------
-Les moteurs du robot ont des limites mécaniques.
-Si on dépasse ces limites → erreur ou blocage.
+    Pourquoi c'est important ?
+    --------------------------
+    Les moteurs du robot ont des limites mécaniques.
+    Si on dépasse ces limites → erreur ou blocage.
 
-Exemple :
-clamp(200, -150, 150) → 150
-"""
-return max(min_value, min(max_value, value))
+    Exemple :
+    clamp(200, -150, 150) → 150
+    """
+    return max(min_value, min(max_value, value))
 
 
 # =========================================================
 # 4. CINÉMATIQUE INVERSE (POSITION X, Y, Z → J1 J2 J3)
 # =========================================================
 def ik_position(x, y, z):
-"""
-Transforme une position 3D (X, Y, Z)
-en angles articulaires du robot.
+    """
+    Transforme une position 3D (X, Y, Z)
+    en angles articulaires du robot.
 
-Sortie :
--------
-[J1, J2, J3]
-"""
+    Sortie :
+    -------
+    [J1, J2, J3]
+    """
 
-# -----------------------------
-# J1 : rotation de la base
-# -----------------------------
-# orientation horizontale vers la cible
-j1 = math.degrees(math.atan2(y, x))
-j1 = clamp(j1, -168, 168)
+    # -----------------------------
+    # J1 : rotation de la base
+    # -----------------------------
+    # orientation horizontale vers la cible
+    j1 = math.degrees(math.atan2(y, x))
+    j1 = clamp(j1, -168, 168)
 
-# distance horizontale au point
-r = math.sqrt(x**2 + y**2)
+    # distance horizontale au point
+    r = math.sqrt(x**2 + y**2)
 
-# distance totale au point
-d = math.sqrt(r**2 + z**2)
+    # distance totale au point
+    d = math.sqrt(r**2 + z**2)
 
-# vérification de portée
-if d > (L1 + L2):
-print("❌ Position hors portée du robot")
-return None
+    # vérification de portée
+    if d > (L1 + L2):
+        print("❌ Position hors portée du robot")
+        return None
 
-# angle direction cible
-angle = math.degrees(math.atan2(z, r))
+    # angle direction cible
+    angle = math.degrees(math.atan2(z, r))
 
-# -----------------------------
-# J3 : angle du coude
-# -----------------------------
-cos_elbow = (L1**2 + L2**2 - d**2) / (2 * L1 * L2)
-cos_elbow = clamp(cos_elbow, -1, 1)
+    # -----------------------------
+    # J3 : angle du coude
+    # -----------------------------
+    cos_elbow = (L1**2 + L2**2 - d**2) / (2 * L1 * L2)
+    cos_elbow = clamp(cos_elbow, -1, 1)
 
-j3 = math.degrees(math.acos(cos_elbow)) - 180
+    j3 = math.degrees(math.acos(cos_elbow)) - 180
 
-# -----------------------------
-# J2 : angle de l'épaule
-# -----------------------------
-cos_shoulder = (L1**2 + d**2 - L2**2) / (2 * L1 * d)
-cos_shoulder = clamp(cos_shoulder, -1, 1)
+    # -----------------------------
+    # J2 : angle de l'épaule
+    # -----------------------------
+    cos_shoulder = (L1**2 + d**2 - L2**2) / (2 * L1 * d)
+    cos_shoulder = clamp(cos_shoulder, -1, 1)
 
-j2 = angle - math.degrees(math.acos(cos_shoulder))
+    j2 = angle - math.degrees(math.acos(cos_shoulder))
 
-return j1, j2, j3
+    return j1, j2, j3
 
 
 # =========================================================
 # 5. ORIENTATION DE L’OUTIL (J4 J5 J6)
 # =========================================================
 def ik_orientation_3d(x, y, z):
-"""
-Définit l'orientation de la pince vers la cible.
+    """
+    Définit l'orientation de la pince vers la cible.
 
-IMPORTANT :
-----------
-Ici on simplifie volontairement :
-- J4 et J6 sont fixes pour éviter instabilité mécanique
-- J5 suit l'inclinaison vers la cible
-"""
+    IMPORTANT :
+    ----------
+    Ici on simplifie volontairement :
+    - J4 et J6 sont fixes pour éviter instabilité mécanique
+    - J5 suit l'inclinaison vers la cible
+    """
 
-# distance horizontale XY
-r_xy = math.sqrt(x**2 + y**2)
+    # distance horizontale XY
+    r_xy = math.sqrt(x**2 + y**2)
 
-# -----------------------------
-# J4 : rotation outil (fixe)
-# -----------------------------
-j4 = 0
+    # -----------------------------
+    # J4 : rotation outil (fixe)
+    # -----------------------------
+    j4 = 0
 
-# -----------------------------
-# J5 : inclinaison vers cible
-# -----------------------------
-j5 = math.degrees(math.atan2(z, r_xy))
+    # -----------------------------
+    # J5 : inclinaison vers cible
+    # -----------------------------
+    j5 = math.degrees(math.atan2(z, r_xy))
 
-# -----------------------------
-# J6 : rotation finale outil (fixe)
-# -----------------------------
-j6 = 0
+    # -----------------------------
+    # J6 : rotation finale outil (fixe)
+    # -----------------------------
+    j6 = 0
 
-return j4, j5, j6
+    return j4, j5, j6
 
 
 # =========================================================
@@ -179,110 +179,108 @@ et effectue le mouvement.
 
 while True:
 
-# -----------------------------
-# arrêt programme
-# -----------------------------
-print("\n=========================================")
-print("Nouvelle demande de déplacement")
-print("=========================================")
-cmd = input("\nEntrée pour bouger / q pour quitter : ")
-if cmd.lower() == "q":
-break
+    # -----------------------------
+    # arrêt programme
+    # -----------------------------
+    print("\n=========================================")
+    print("Nouvelle demande de déplacement")
+    print("=========================================")
+    cmd = input("\nEntrée pour bouger / q pour quitter : ")
+    if cmd.lower() == "q":
+        break
 
-# -----------------------------
-# saisie utilisateur
-# -----------------------------
-print("\nVeuillez saisir la position souhaitée du robot.")
-print("Les coordonnées sont exprimées en millimètres.")
-print("Contraintes de sécurité :")
-print("X : entre -250 mm et 250 mm")
-print("Y : entre -190 mm et 190 mm")
-print("Z : entre -50 mm et 250 mm")
+    # -----------------------------
+    # saisie utilisateur
+    # -----------------------------
+    print("\nVeuillez saisir la position souhaitée du robot.")
+    print("Les coordonnées sont exprimées en millimètres.")
+    print("Contraintes de sécurité :")
+    print("X : entre -250 mm et 250 mm")
+    print("Y : entre -190 mm et 190 mm")
+    print("Z : entre -50 mm et 250 mm")
 
-x = float(input("X (mm) : "))
-y = float(input("Y (mm) : "))
-z = float(input("Z (mm) : "))
+    x = float(input("X (mm) : "))
+    y = float(input("Y (mm) : "))
+    z = float(input("Z (mm) : "))
 
-# -----------------------------
-# vérification des coordonnées
-# -----------------------------
-if x < -250 or x > 250:
-print(" Erreur : X doit être compris entre 50 mm et 250 mm.")
-continue
+    # -----------------------------
+    # vérification des coordonnées
+    # -----------------------------
+    if x < -250 or x > 250:
+        print(" Erreur : X doit être compris entre -250 mm et 250 mm.")
+        continue
 
-if y < -190 or y > 190:
-print(" Erreur : Y doit être compris entre -200 mm et 200 mm.")
-continue
+    if y < -190 or y > 190:
+        print(" Erreur : Y doit être compris entre -190 mm et 190 mm.")
+        continue
 
-if z < -50 or z > 250:
-print(" Erreur : Z doit être compris entre -50 mm et 250 mm.")
-continue
+    if z < -50 or z > 250:
+        print(" Erreur : Z doit être compris entre -50 mm et 250 mm.")
+        continue
 
-print("-----------------------------------------")
-print("Coordonnées reçues :")
-print("X =", x, "mm")
-print("Y =", y, "mm")
-print("Z =", z, "mm")
-print("-----------------------------------------")
+    print("-----------------------------------------")
+    print("Coordonnées reçues :")
+    print("X =", x, "mm")
+    print("Y =", y, "mm")
+    print("Z =", z, "mm")
+    print("-----------------------------------------")
 
-print("\nCalcul IK en cours...")
+    print("\nCalcul IK en cours...")
 
-# -----------------------------
-# calcul position (J1 J2 J3)
-# -----------------------------
-print("Calcul des angles des articulations J1, J2 et J3...")
-pos = ik_position(x, y, z)
+    # -----------------------------
+    # calcul position (J1 J2 J3)
+    # -----------------------------
+    print("Calcul des angles des articulations J1, J2 et J3...")
+    pos = ik_position(x, y, z)
 
-if pos is None:
-continue
+    if pos is None:
+        continue
 
-j1, j2, j3 = pos
+    j1, j2, j3 = pos
 
-print("Calcul terminé.")
-print("J1 =", round(j1, 2), "°")
-print("J2 =", round(j2, 2), "°")
-print("J3 =", round(j3, 2), "°")
+    print("Calcul terminé.")
+    print("J1 =", round(j1, 2), "°")
+    print("J2 =", round(j2, 2), "°")
+    print("J3 =", round(j3, 2), "°")
 
-# -----------------------------
-# calcul orientation (J4 J5 J6)
-# -----------------------------
-print("\nCalcul de l'orientation de l'outil...")
-j4, j5, j6 = ik_orientation_3d(x, y, z)
+    # -----------------------------
+    # calcul orientation (J4 J5 J6)
+    # -----------------------------
+    print("\nCalcul de l'orientation de l'outil...")
+    j4, j5, j6 = ik_orientation_3d(x, y, z)
 
-print("Orientation calculée :")
-print("J4 =", round(j4, 2), "°")
-print("J5 =", round(j5, 2), "°")
-print("J6 =", round(j6, 2), "°")
+    print("Orientation calculée :")
+    print("J4 =", round(j4, 2), "°")
+    print("J5 =", round(j5, 2), "°")
+    print("J6 =", round(j6, 2), "°")
 
-# -----------------------------
-# sécurité finale des angles
-# -----------------------------
-angles = [
-clamp(j1, -168, 168),
-clamp(j2, -150, 150),
-clamp(j3, -150, 150),
-clamp(j4, -150, 150),
-clamp(j5, -150, 150),
-clamp(j6, -180, 180)
-]
+    # -----------------------------
+    # sécurité finale des angles
+    # -----------------------------
+    angles = [
+        clamp(j1, -168, 168),
+        clamp(j2, -140, 140),
+        clamp(j3, -150, 150),
+        clamp(j4, -150, 150),
+        clamp(j5, -155, 160),
+        clamp(j6, -180, 180)
+    ]
 
-# affichage debug
-print("\nAngles envoyés au robot :", angles)
-print("Envoi des angles au robot...")
+    # affichage debug
+    print("\nAngles envoyés au robot :", angles)
+    print("Envoi des angles au robot...")
 
-# envoi au robot
-mc.send_angles(angles, SPEED)
+    # envoi au robot
+    mc.send_angles(angles, SPEED)
 
-print("Commande envoyée.")
-print("Le robot est en mouvement...")
+    print("Commande envoyée.")
+    print("Le robot est en mouvement...")
 
-# pause pour mouvement
-time.sleep(2)
+    # pause pour mouvement
+    time.sleep(2)
 
-# retour état robot
-print("Position réelle :", mc.get_coords())
-print("Commande envoyée.")
-print("Le robot est en mouvement...")
+    # retour état robot
+    print("Position réelle :", mc.get_coords())
 
 
 # =========================================================

@@ -1,4 +1,4 @@
-from pymycobot.mycobot import MyCobot
+from pymycobot.mycobot280 import MyCobot280
 import threading
 import time
 from math import sqrt
@@ -6,7 +6,7 @@ from math import sqrt
 stop_event = threading.Event()    # Arrêt déclenché par le blocage du robot
 alerte_event = threading.Event()  # La mise en mouvement du robot déclenche une alerte
 
-mc = MyCobot('/dev/ttyTHS1', 1000000)
+mc = MyCobot280('/dev/ttyTHS1', 1000000)
 
 ### Configuration de la sécurité (à modifier selon les besoins) ###
 DISTANCE_SEUIL = 5.0  # Seuil de distance pour déclencher l'alerte
@@ -29,7 +29,7 @@ def arretSecurite():
                 mc.stop()
                 stop_event.set()
         time.sleep(0.1)
-    mc.set_coords(0, 0, 0, 0, 0, 0)  # Ramener le robot à une position sûre
+    mc.go_home()  # Ramener le robot à une position sûre (angles J1..J6 à 0)
     print("Robot arrêté et ramené à une position sûre.")
     stop_event.clear()  
 
