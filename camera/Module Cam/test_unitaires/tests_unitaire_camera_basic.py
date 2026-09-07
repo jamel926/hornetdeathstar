@@ -5,11 +5,15 @@ import os
 import cv2
 import sys
 import io
+import importlib.util
 
 ## importation de la classe à tester
 dossier_racine = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.append(dossier_racine)
-from camera.Module_Camera import LaCamera
+specification = importlib.util.spec_from_file_location(
+    'Module_Camera', os.path.join(dossier_racine, 'Module_Camera.py'))
+module_camera = importlib.util.module_from_spec(specification)
+specification.loader.exec_module(module_camera)
+LaCamera = module_camera.LaCamera
 
 
 class TestLaCamera(unittest.TestCase):
@@ -61,19 +65,17 @@ class TestLaCamera(unittest.TestCase):
         resultat = self.camera_app.flagCaptureImage(False)
         self.assertTrue(resultat)
 
+    @patch('cv2.waitKey', return_value=ord('q'))
     @patch('cv2.destroyAllWindows')
     @patch('cv2.imshow')
-    def test_afficherLive_boucle_complete(self, mock_imshow, mock_destroy):
+    def test_afficherLive_boucle_complete(self, mock_imshow, mock_destroy, mock_wait_key):
         # 1. On simule que la caméra est bien connectée
         self.camera_app.camera.isOpened.return_value = True
         
         # 2. On simule la lecture d'une image : (True, 'fausse_image_matrice')
         self.camera_app.camera.read.return_value = (True, "frame_fictive")
         
-        # 3. On mock quitterAffichage pour qu'il retourne True à la première boucle
-        # Cela permet d'entrer dans la boucle `while(True)`, de faire un tour, et de quitter
-        with patch.object(self.camera_app, 'quitterAffichage', return_value=True):
-            self.camera_app.afficherLive()
+        self.camera_app.afficherLive()
             
         # VÉRIFICATIONS (Rapports intégrés)
         # On vérifie que imshow a bien été appelé avec notre image fictive
@@ -82,6 +84,20 @@ class TestLaCamera(unittest.TestCase):
         self.camera_app.camera.release.assert_called_once()
         # On vérifie que les fenêtres ont été fermées
         mock_destroy.assert_called_once()
+
+    @patch('cv2.imwrite', return_value=True)
+    @patch('cv2.waitKey', side_effect=[ord('s'), ord('q')])
+    @patch('cv2.destroyAllWindows')
+    @patch('cv2.imshow')
+    def test_afficherLive_capture_avec_s(self, mock_imshow, mock_destroy, mock_wait_key, mock_imwrite):
+        self.camera_app.camera.isOpened.return_value = True
+        self.camera_app.camera.read.return_value = (True, 'frame_fictive')
+
+        self.camera_app.afficherLive()
+
+        mock_imwrite.assert_called_once()
+        self.assertEqual(mock_imwrite.call_args.args[1], 'frame_fictive')
+        self.camera_app.camera.release.assert_called_once()
 
     def test_afficherLive_erreur_connexion(self):
         # On simule une caméra non connectée
