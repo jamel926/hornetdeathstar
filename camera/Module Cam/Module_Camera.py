@@ -1,4 +1,4 @@
-
+import time
 import cv2
 
 class LaCamera:
@@ -45,6 +45,26 @@ class LaCamera:
                 break
         self.camera.release()
         cv2.destroyAllWindows()
+
+    def capturerImage(self):
+        """Capture une image de la caméra et l'affiche. Appuyez sur 'q' pour quitter."""
+        if self.etatConnexionCamera():
+            return
+        ret,frame = self.camera.read()
+
+        if self.flagCaptureImage(ret):
+            print("Erreur lors de la capture de l'image")
+            self.camera.release()
+            return 
+        
+        cv2.imwrite(f'image_capturee{time.time()}.jpg', frame)
+
+        while(True):
+            if self.quitterAffichage():
+                break
+        self.camera.release()
+        cv2.destroyAllWindows()
+
 
 if __name__ == "__main__":
     camera = LaCamera(camera_index=0)
