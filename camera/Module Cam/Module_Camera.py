@@ -13,8 +13,11 @@ class LaCamera:
 
     def enregistrerImage(self, frame):
         """Enregistre une image capturée depuis le flux vidéo."""
+        import os
+        if not os.path.exists("imgs"):
+            os.mkdir("imgs")
         current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]
-        nom_fichier = f'image_capturee_{current_time}.jpg'
+        nom_fichier = f'imgs/image_capturee_{current_time}.jpg'
         if cv2.imwrite(nom_fichier, frame):
             print(f"Image enregistrée : {nom_fichier}")
             return True
