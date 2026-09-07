@@ -1,4 +1,4 @@
-import time
+from datetime import datetime
 import cv2
 
 class LaCamera:
@@ -13,7 +13,8 @@ class LaCamera:
 
     def enregistrerImage(self, frame):
         """Enregistre une image capturée depuis le flux vidéo."""
-        nom_fichier = f'image_capturee{time.time()}.jpg'
+        current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]
+        nom_fichier = f'image_capturee_{current_time}.jpg'
         if cv2.imwrite(nom_fichier, frame):
             print(f"Image enregistrée : {nom_fichier}")
             return True
