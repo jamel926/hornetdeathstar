@@ -2,8 +2,8 @@
 import cv2
 
 class LaCamera:
-    def __init__(self):
-        self.portCamera=0
+    def __init__(self , camera_index = 0):
+        self.portCamera=camera_index
         self.camera = cv2.VideoCapture(self.portCamera)
 
 
@@ -47,5 +47,5 @@ class LaCamera:
         cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    camera = LaCamera()
+    camera = LaCamera(camera_index=0)
     camera.afficherLive()
