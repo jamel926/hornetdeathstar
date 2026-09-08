@@ -118,6 +118,24 @@ TOLERANCE_BASE = 1.0     # degres
 # Periode de scrutation pendant l'attente d'arrivee.
 PERIODE_SCRUTATION = 0.2  # secondes
 
+"""
+Decalage de la pose d'approche, en degres.
+
+Toute pose de tete est atteinte en passant d'abord par
+cette pose decalee, donc TOUJOURS dans le meme sens de
+rotation. Le jeu des reducteurs est ainsi rattrape du meme
+cote a chaque fois.
+
+Ce n'est pas une precaution theorique : la campagne de
+repetabilite du 08/09 donne 2,19 degres de dispersion sur
+J1 avec une approche libre, contre 0,09 avec une approche
+identique a chaque essai. Le meme jeu existe sur J5, qui
+est un axe de pointage.
+
+Le signe compte, la valeur peu : ne pas l'annuler.
+"""
+APPROCHE_TETE = [8.0, 8.0, 0.0]   # degres
+
 
 # =========================================================
 # 4. FICHIER DE REFERENCE
@@ -397,6 +415,37 @@ def bougerTete(mc, tete, vitesse=VITESSE_TETE, timeout=TIMEOUT_TETE,
               "degres pendant le mouvement de la tete.")
 
     return arrive, mesure
+
+
+def bougerTeteAvecApproche(mc, tete, vitesse=VITESSE_TETE, timeout=TIMEOUT_TETE,
+                           tolerance=TOLERANCE_TETE, decalage=None):
+    """Atteint la pose de tete en passant par une pose d'approche, toujours dans le meme sens."""
+
+    if decalage is None:
+        decalage = APPROCHE_TETE
+
+    approche = [tete[i] + decalage[i] for i in range(3)]
+
+    base = lireBase(mc)
+
+    if base is None:
+        print("Lecture impossible, mouvement annule.")
+        return False, None
+
+    """
+    Si la pose d'approche sort des limites, on rejoint la
+    cible directement plutot que d'echouer : mieux vaut un
+    point atteint avec un peu plus de jeu qu'un point non
+    atteint. On le signale, parce que ce point sera plus
+    disperse que les autres.
+    """
+
+    if verifierAngles(construirePose(base, approche)):
+        bougerTete(mc, approche, vitesse, timeout, tolerance)
+    else:
+        print("Pose d'approche hors limites : arrivee directe, jeu non rattrape.")
+
+    return bougerTete(mc, tete, vitesse, timeout, tolerance)
 
 
 def retourTete(mc, reference=None, vitesse=VITESSE_TETE):
