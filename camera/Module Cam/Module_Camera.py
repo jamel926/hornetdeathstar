@@ -1,4 +1,4 @@
-from datetime import datetime
+import time
 import cv2
 
 class LaCamera:
@@ -9,22 +9,12 @@ class LaCamera:
 
     def quitterAffichage(self):
         """Vérifie si l'utilisateur a appuyé sur la touche 'q' pour quitter l'affichage du flux vidéo en direct. Si la touche 'q' est pressée, cela signifie que l'utilisateur souhaite quitter, sinon le flux vidéo continue d'être affiché."""
-        return (cv2.waitKey(1) & 0xFF) in (ord('q'), ord('Q'))
-
-    def enregistrerImage(self, frame):
-        """Enregistre une image capturée depuis le flux vidéo."""
-        current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]
-        nom_fichier = f'image_capturee_{current_time}.jpg'
-        if cv2.imwrite(nom_fichier, frame):
-            print(f"Image enregistrée : {nom_fichier}")
-            return True
-        print("Erreur lors de l'enregistrement de l'image")
-        return False
+        return cv2.waitKey(1) & 0xFF == ord('q')
 
     def etatConnexionCamera(self):
         """Vérifie si la caméra est connectée et prête à être utilisée. Si la caméra est ouverte, cela signifie qu'elle est connectée et prête à être utilisée, sinon il y a une erreur de connexion."""
         if self.camera.isOpened():
-            print("La camera est connectée. Appuyez sur Espace ou s pour une photo, q pour quitter")
+            print("La camera est connectée. Appuyez sur q pour quitter")
             return False
         else:
             print("Erreur de connexion")
@@ -41,7 +31,7 @@ class LaCamera:
 
 
     def afficherLive(self):
-        """Affiche le flux vidéo. Appuyez sur Espace ou 's' pour une photo, 'q' pour quitter."""
+        """Affiche le flux vidéo en direct de la caméra. Appuyez sur 'q' pour quitter."""
         if self.etatConnexionCamera():
             return
         while(True):
@@ -51,11 +41,8 @@ class LaCamera:
                 break
             cv2.imshow('Image en direct',frame)
 
-            touche = cv2.waitKey(1) & 0xFF
-            if touche in (ord('q'), ord('Q')):
+            if self.quitterAffichage():
                 break
-            if touche in (ord('s'), ord('S'), 32):
-                self.enregistrerImage(frame)
         self.camera.release()
         cv2.destroyAllWindows()
 
@@ -70,7 +57,7 @@ class LaCamera:
             self.camera.release()
             return 
         
-        self.enregistrerImage(frame)
+        cv2.imwrite(f'image_capturee{time.time()}.jpg', frame)
 
         while(True):
             if self.quitterAffichage():
@@ -78,7 +65,11 @@ class LaCamera:
         self.camera.release()
         cv2.destroyAllWindows()
 
+    def tailleCamera(self):
+        width = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        return(width,height)
 
 if __name__ == "__main__":
-    camera = LaCamera(camera_index=1)
+    camera = LaCamera(camera_index=0)
     camera.afficherLive()
