@@ -99,23 +99,23 @@ release_all_servos) puis lire mc.get_angles().
 """
 
 ANGLES_POSITION_INITIALE = [
-    2.0,      # J1 - rotation de la base
-    48.0,     # J2 - epaule
-    -144.0,   # J3 - coude
-    75.0,     # J4 - poignet
-    1.0,      # J5 - inclinaison de l'outil
-    1.0       # J6 - rotation finale de l'outil
+    0.0,      # J1 - rotation de la base
+    50.0,     # J2 - epaule
+    -145.0,   # J3 - coude
+    40.0,     # J4 - poignet
+    0.0,      # J5 - inclinaison de l'outil
+    0.0       # J6 - rotation finale de l'outil
 ]
-'''
-ANGLES_POSITION_INITIALE = [
+
+ANGLES_POSITION_VERTICALE= [
     0.0,      # J1 - rotation de la base
     0.0,     # J2 - epaule
     0.0,   # J3 - coude
     0.0,     # J4 - poignet
     0.0,      # J5 - inclinaison de l'outil
-    .0       # J6 - rotation finale de l'outil
+    0.0       # J6 - rotation finale de l'outil
 ]
-'''
+
 # =========================================================
 # 6. CONNEXION AU ROBOT
 # =========================================================
