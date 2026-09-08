@@ -14,7 +14,7 @@ calculees par la stereovision ne veulent rien dire.
 
 Utilisation comme module :
 -------------------------
-    from PU_PositionInitiale import connecterRobot, allerPositionInitiale
+    from PU_PositionInitiale import connecteroRobot, allerPositionInitiale
 
     mc = connecterRobot()
     if mc is not None and allerPositionInitiale(mc):
@@ -28,6 +28,8 @@ ATTENTION :
 ----------
 Degager l'espace autour du bras et desarmer le laser
 avant toute execution.
+
+Angles mesures : [2.54, 48.42, -124.36, 74.26, 0.35, 0.0]
 """
 
 
@@ -91,13 +93,13 @@ NOMS_ARTICULATIONS = ["J1", "J2", "J3", "J4", "J5", "J6"]
 """
 Pose de depart du bras, en degres.
 
-Valeurs relevees sur le demonstrateur.
+Valeurs relevees sur le demonstrateur.o
 
 Pour les relever a nouveau : placer le bras a la main
 dans la pose voulue (moteurs relaches via
 release_all_servos) puis lire mc.get_angles().
 """
-
+'''
 ANGLES_POSITION_INITIALE = [
     2.0,      # J1 - rotation de la base
     48.0,     # J2 - epaule
@@ -105,9 +107,29 @@ ANGLES_POSITION_INITIALE = [
     75.0,     # J4 - poignet
     1.0,      # J5 - inclinaison de l'outil
     1.0       # J6 - rotation finale de l'outil
+]'''
+ANGLES_POSITION_INITIALE = [
+    2.0,      # J1 - rotation de la base
+    40.0,     # J2 - epaule
+    -144.0,   # J3 - coude
+    75.0,     # J4 - poignet
+    1.0,      # J5 - inclinaison de l'outil
+    1.0       # J6 - rotation finale de l'outil
 ]
+<<<<<<< HEAD
 
-
+=======
+'''
+ANGLES_POSITION_INITIALE = [
+    0.0,      # J1 - rotation de la base
+    0.0,     # J2 - epaule
+    0.0,   # J3 - coude
+    0.0,     # J4 - poignet
+    0.0,      # J5 - inclinaison de l'outil
+    .0       # J6 - rotation finale de l'outil
+]
+'''
+>>>>>>> 554d196705b854afb3d47b1adc091faa6f8b50ac
 # =========================================================
 # 6. CONNEXION AU ROBOT
 # =========================================================
