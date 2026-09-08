@@ -149,7 +149,7 @@ class TestViser(unittest.TestCase):
         """Le robot atteint le point : la fonction retourne True."""
         mc = fauxRobot()
 
-        self.assertTrue(PU_Visee.viser(mc, POINT_TEST))
+        self.assertTrue(PU_Visee.allerAuPoint(mc, POINT_TEST))
         mc.sync_send_coords.assert_called_once()
 
     def test_orientation_courante_conservee(self):
@@ -157,7 +157,7 @@ class TestViser(unittest.TestCase):
         mc = fauxRobot(coords=[0.0, 0.0, 0.0, -90.0, 5.0, 45.0])
         mc.get_coords.return_value = [150.0, 0.0, 200.0, -90.0, 5.0, 45.0]
 
-        PU_Visee.viser(mc, [150.0, 0.0, 200.0])
+        PU_Visee.allerAuPoint(mc, [150.0, 0.0, 200.0])
 
         coords_envoyees = mc.sync_send_coords.call_args[0][0]
 
@@ -167,7 +167,7 @@ class TestViser(unittest.TestCase):
         """pymycobot exige un int pour la vitesse : une vitesse flottante est convertie."""
         mc = fauxRobot()
 
-        PU_Visee.viser(mc, POINT_TEST, vitesse=20.0)
+        PU_Visee.allerAuPoint(mc, POINT_TEST, vitesse=20.0)
 
         vitesse_envoyee = mc.sync_send_coords.call_args[0][1]
 
@@ -179,7 +179,7 @@ class TestViser(unittest.TestCase):
         mc = fauxRobot()
 
         self.assertFalse(
-            PU_Visee.viser(mc, [300.0, 0.0, 200.0])
+            PU_Visee.allerAuPoint(mc, [300.0, 0.0, 200.0])
         )
         mc.sync_send_coords.assert_not_called()
 
@@ -188,7 +188,7 @@ class TestViser(unittest.TestCase):
         mc = fauxRobot()
         mc.solve_inv_kinematics.return_value = -1
 
-        self.assertFalse(PU_Visee.viser(mc, POINT_TEST))
+        self.assertFalse(PU_Visee.allerAuPoint(mc, POINT_TEST))
         mc.sync_send_coords.assert_not_called()
 
     def test_point_non_atteint(self):
@@ -196,21 +196,21 @@ class TestViser(unittest.TestCase):
         mc = fauxRobot()
         mc.get_coords.return_value = [100.0, 0.0, 200.0, 0.0, 0.0, 0.0]
 
-        self.assertFalse(PU_Visee.viser(mc, POINT_TEST))
+        self.assertFalse(PU_Visee.allerAuPoint(mc, POINT_TEST))
 
     def test_orientation_non_atteinte(self):
         """Un ecart d'orientation trop grand fait echouer la visee, meme position correcte."""
         mc = fauxRobot()
         mc.get_coords.return_value = [150.0, 0.0, 200.0, 45.0, 0.0, 0.0]
 
-        self.assertFalse(PU_Visee.viser(mc, POINT_TEST))
+        self.assertFalse(PU_Visee.allerAuPoint(mc, POINT_TEST))
 
     def test_arret_du_mouvement_en_cours(self):
         """Un mouvement deja lance est stoppe avant la visee."""
         mc = fauxRobot()
         mc.is_moving.return_value = 1
 
-        PU_Visee.viser(mc, POINT_TEST)
+        PU_Visee.allerAuPoint(mc, POINT_TEST)
 
         mc.stop.assert_called_once()
 
@@ -219,13 +219,13 @@ class TestViser(unittest.TestCase):
         mc = fauxRobot()
         mc.sync_send_coords.side_effect = Exception("port ferme")
 
-        self.assertFalse(PU_Visee.viser(mc, POINT_TEST))
+        self.assertFalse(PU_Visee.allerAuPoint(mc, POINT_TEST))
 
     def test_point_mal_forme(self):
         """Un point de 4 valeurs est refuse."""
         mc = fauxRobot()
 
-        self.assertFalse(PU_Visee.viser(mc, [1.0, 2.0, 3.0, 4.0]))
+        self.assertFalse(PU_Visee.allerAuPoint(mc, [1.0, 2.0, 3.0, 4.0]))
 
 
 if __name__ == "__main__":

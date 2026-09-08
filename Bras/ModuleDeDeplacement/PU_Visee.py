@@ -1,14 +1,34 @@
 """
 =========================================================
-ROBOT MYCOBOT 280 - VISEE EN COORDONNEES CARTESIENNES
+ROBOT MYCOBOT 280 - DEPLACEMENT EN COORDONNEES CARTESIENNES
 =========================================================
 
 Objectif :
 ---------
-Amener la tete du bras sur un point (X, Y, Z) exprime
+Amener la tete du bras SUR un point (X, Y, Z) exprime
 dans le repere du robot, en s'appuyant sur la cinematique
 inverse du firmware (send_coords / solve_inv_kinematics)
 plutot que sur un modele geometrique approche.
+
+ATTENTION - ce module ne vise pas, il positionne :
+-------------------------------------------------
+La fonction allerAuPoint() envoie la tete du bras EXACTEMENT
+sur le point demande. Ce n'est PAS ce qu'il faut faire d'une
+position de frelon : le bras irait le percuter au lieu de le
+viser.
+
+    Aller au point   : la tete se pose sur P.
+    Viser le point   : la tete reste a distance de P, et
+                       l'axe du laser passe par P.
+
+La vraie visee s'ecrira PAR-DESSUS ce module :
+    1. choisir une distance de tir d et une direction u
+    2. calculer le point d'emission E = P - d * u
+    3. appeler allerAuPoint(mc, E, orientation_de_u)
+
+Ce module reste donc la brique de bas niveau : il valide la
+consigne, verifie la faisabilite avant de bouger, et mesure
+l'ecart reellement atteint.
 
 Pourquoi passer par le firmware :
 --------------------------------
@@ -33,11 +53,11 @@ avant qu'il ne le fasse.
 
 Utilisation comme module :
 -------------------------
-    from PU_Visee import viser
+    from PU_Visee import allerAuPoint
     from PU_PositionInitiale import connecterRobot
 
     mc = connecterRobot()
-    viser(mc, [150.0, 0.0, 200.0])
+    allerAuPoint(mc, [150.0, 0.0, 200.0])
 
 Utilisation en autonome :
 ------------------------
@@ -272,9 +292,15 @@ def ecartVisee(coords_mesurees, coords_cibles):
 # 8. VISEE
 # =========================================================
 
-def viser(mc, point, orientation=None, vitesse=VITESSE_VISEE,
+def allerAuPoint(mc, point, orientation=None, vitesse=VITESSE_VISEE,
           mode=MODE_VISEE, timeout=TIMEOUT_VISEE):
-    """Amene la tete du bras sur le point vise et retourne True si la position est atteinte."""
+    """Amene la tete du bras sur le point demande et retourne True si la position est atteinte."""
+
+    """
+    Rappel : cette fonction POSITIONNE la tete sur le point,
+    elle ne vise pas une cible situee a distance. Voir
+    l'avertissement en tete de fichier.
+    """
 
     # -----------------------------------------------------
     # Construction de la consigne complete
@@ -475,7 +501,7 @@ def main():
         print("           NOUVELLE VISEE")
         print("=========================================")
         print()
-        print("Entree pour viser un point / q pour quitter.")
+        print("Entree pour deplacer la tete sur un point / q pour quitter.")
 
         commande = input("> ")
 
@@ -513,7 +539,7 @@ def main():
         premiers tests ne sont pas concluants.
         """
 
-        succes = viser(mc, [x, y, z])
+        succes = allerAuPoint(mc, [x, y, z])
 
         print("-----------------------------------------")
 
