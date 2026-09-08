@@ -298,7 +298,63 @@ def estEnPositionInitiale(mc, angles=None, tolerance=TOLERANCE_ANGLE):
 
 
 # =========================================================
-# 10. MISE EN POSITION INITIALE
+# 10. VERIFICATION DE L'ETAT DES SERVOS
+# =========================================================
+
+def verifierEtatServos(mc):
+    """Verifie l'etat des 6 servos et arrete le bras si une erreur est detectee."""
+
+    # -----------------------------------------------------
+    # Lecture de l'etat
+    # -----------------------------------------------------
+
+    """
+    mc.stop() est utilise volontairement ici : il coupe le
+    mouvement mais garde le couple, donc le bras reste
+    immobile a sa derniere position au lieu de tomber
+    (contrairement a release_all_servos ou power_off).
+    """
+
+    try:
+        status = mc.get_servo_status()
+
+    except Exception as e:
+        print("Erreur de lecture de l'etat des servos :", e)
+        mc.stop()
+        return True
+
+    if not isinstance(status, list) or len(status) != 6:
+        print("Reponse de get_servo_status inattendue :", status)
+        mc.stop()
+        return True
+
+    # -----------------------------------------------------
+    # Detection d'une erreur, articulation par articulation
+    # -----------------------------------------------------
+
+    erreur_detectee = False
+
+    for i in range(6):
+
+        code = status[i]
+
+        if code != 0:
+            erreur_detectee = True
+            print("ALERTE -", NOMS_ARTICULATIONS[i], ": code(s) d'erreur", code)
+
+    # -----------------------------------------------------
+    # Arret si necessaire
+    # -----------------------------------------------------
+
+    if erreur_detectee:
+        mc.stop()
+        print("Moteurs arretes suite a une erreur servo.")
+
+    return erreur_detectee
+
+
+# =========================================================
+# 11. MISE EN POSITION INITIALE
 # =========================================================
 
 def allerPositionInitiale(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEOUT_INIT):
@@ -353,6 +409,21 @@ def allerPositionInitiale(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEOUT
         return False
 
     # -----------------------------------------------------
+    # Verification de l'etat des servos
+    # -----------------------------------------------------
+
+    """
+    On verifie l'etat des servos avant de statuer sur la
+    reussite : atteindre la bonne pose par hasard malgre
+    une erreur moteur ne doit pas etre rapporte comme un
+    succes.
+    """
+
+    if verifierEtatServos(mc):
+        print("Anomalie sur au moins un servo, position initiale non garantie.")
+        return False
+
+    # -----------------------------------------------------
     # Verification de l'arrivee
     # -----------------------------------------------------
 
@@ -377,115 +448,3 @@ def allerPositionInitiale(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEOUT
         print("La position initiale n'est PAS atteinte.")
         print("Tolerance :", TOLERANCE_ANGLE, "degres")
         return False
-
-    print("Position initiale atteinte.")
-    return True
-
-
-# =========================================================
-# 11. EXECUTION AUTONOME
-# =========================================================
-
-def main():
-    """Sequence complete de mise en position initiale, avec confirmation de l'operateur."""
-
-    print()
-    print("=========================================")
-    print("   MISE EN POSITION INITIALE DU BRAS")
-    print("=========================================")
-    print()
-    print("ATTENTION : degager l'espace autour du bras")
-    print("et verifier que le laser est desarme.")
-    print()
-
-    # -----------------------------------------------------
-    # Connexion
-    # -----------------------------------------------------
-
-    mc = connecterRobot()
-
-    if mc is None:
-        print()
-        print("Robot indisponible, programme interrompu.")
-        return 1
-
-    # -----------------------------------------------------
-    # Etat de depart
-    # -----------------------------------------------------
-
-    print()
-    print("Position actuelle :", lireAngles(mc))
-    print("Position visee    :", ANGLES_POSITION_INITIALE)
-
-    if estEnPositionInitiale(mc):
-        print()
-        print("Le bras est deja en position initiale.")
-        return 0
-
-    # -----------------------------------------------------
-    # Confirmation de l'operateur
-    # -----------------------------------------------------
-
-    print()
-    confirmation = input("Lancer la mise en position initiale ? (o/n) : ")
-
-    if confirmation.lower() != "o":
-        print("Mise en position initiale annulee par l'operateur.")
-        return 1
-
-    # -----------------------------------------------------
-    # Mouvement
-    # -----------------------------------------------------
-
-    print()
-    print("-----------------------------------------")
-
-    succes = allerPositionInitiale(mc)
-
-    print("-----------------------------------------")
-
-    # -----------------------------------------------------
-    # Compte rendu
-    # -----------------------------------------------------
-
-    """
-    Les moteurs restent volontairement alimentes.
-
-    Un power_off relacherait les servos et le bras
-    retomberait sous son propre poids : ce serait perdre
-    la position que l'on vient tout juste d'atteindre.
-    """
-    print()
-
-    
-    a=mc.get_servo_status()
-    print("servo_status : ",a) #renvoir [0,0,[i],0,0,0] si 0 alors pas de pb sur J correspondant  et si [i] = errreur de type i
-    print()
-
-    if succes:
-        print("Bras pret. Les moteurs restent alimentes.")
-        return 0
-
-    print("Echec de la mise en position initiale.")
-
-    
-
-
-    print("Les moteurs restent alimentes, le bras n'a pas ete relache.")
-    return 1
-
-
-if __name__ == "__main__":
-
-    try:
-        code_retour = main()
-
-    except KeyboardInterrupt:
-        print()
-        print("Programme interrompu par l'operateur.")
-        code_retour = 1
-
-    print()
-    print("Programme termine.")
-
-    raise SystemExit(code_retour)
