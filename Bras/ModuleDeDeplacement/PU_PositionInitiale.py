@@ -106,8 +106,16 @@ ANGLES_POSITION_INITIALE = [
     1.0,      # J5 - inclinaison de l'outil
     1.0       # J6 - rotation finale de l'outil
 ]
-
-
+'''
+ANGLES_POSITION_INITIALE = [
+    0.0,      # J1 - rotation de la base
+    0.0,     # J2 - epaule
+    0.0,   # J3 - coude
+    0.0,     # J4 - poignet
+    0.0,      # J5 - inclinaison de l'outil
+    .0       # J6 - rotation finale de l'outil
+]
+'''
 # =========================================================
 # 6. CONNEXION AU ROBOT
 # =========================================================

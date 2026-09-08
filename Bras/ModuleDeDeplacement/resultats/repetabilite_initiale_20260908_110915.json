@@ -1,0 +1,414 @@
+{
+  "test": "repetabilite_initiale",
+  "debut": "2026-09-08T11:08:47",
+  "fin": "2026-09-08T11:09:15",
+  "environnement": {
+    "python": "3.13.13",
+    "machine": "nano",
+    "systeme": "Linux-4.9.253-tegra-aarch64-with-glibc2.31",
+    "pymycobot": "4.0.7",
+    "port": "/dev/ttyTHS1",
+    "baudrate": 1000000
+  },
+  "robot": {
+    "get_system_version": 7.3,
+    "get_basic_version": -1,
+    "get_robot_version": "methode absente de cette version de pymycobot",
+    "get_fresh_mode": 0
+  },
+  "constantes": {
+    "serie": "2e teste",
+    "nb_essais": 3,
+    "perturbation": "detour automatique",
+    "TOLERANCE_REPETABILITE": 2.0,
+    "TOLERANCE_BRUIT_LECTURE": 0.5,
+    "NB_LECTURES": 5,
+    "DELAI_STABILISATION": 2.0,
+    "VITESSE_DETOUR": 20,
+    "DECALAGE_DETOUR": [
+      -25.0,
+      -25.0,
+      25.0,
+      -30.0,
+      25.0,
+      30.0
+    ]
+  },
+  "pose_initiale_projet": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "evenements": [
+    {
+      "horodatage": "2026-09-08T11:08:50",
+      "categorie": "communication",
+      "detail": "lecture au repos",
+      "consigne": null,
+      "mesure": [
+        -0.87,
+        0.35,
+        -0.61,
+        -0.08,
+        0.87,
+        0.26
+      ],
+      "lectures_brutes": [
+        [
+          -0.87,
+          0.35,
+          -0.61,
+          -0.08,
+          0.87,
+          0.26
+        ],
+        [
+          -0.87,
+          0.35,
+          -0.61,
+          -0.08,
+          0.87,
+          0.26
+        ],
+        [
+          -0.87,
+          0.35,
+          -0.61,
+          -0.08,
+          0.87,
+          0.26
+        ],
+        [
+          -0.87,
+          0.35,
+          -0.61,
+          -0.08,
+          0.87,
+          0.26
+        ],
+        [
+          -0.87,
+          0.35,
+          -0.61,
+          -0.08,
+          0.87,
+          0.26
+        ]
+      ],
+      "complement": {
+        "bruit_lecture": 0.0,
+        "coords": [
+          44.8,
+          -63.3,
+          420.5,
+          -90.35,
+          0.26,
+          -90.0
+        ]
+      }
+    },
+    {
+      "horodatage": "2026-09-08T11:08:56",
+      "categorie": "essai",
+      "detail": "essai 1",
+      "consigne": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mesure": [
+        -0.87,
+        0.414,
+        -0.61,
+        -0.26,
+        0.87,
+        0.26
+      ],
+      "ecart": [
+        -0.87,
+        0.414,
+        -0.61,
+        -0.26,
+        0.87,
+        0.26
+      ],
+      "lectures_brutes": [
+        [
+          -0.87,
+          0.43,
+          -0.61,
+          -0.26,
+          0.87,
+          0.26
+        ],
+        [
+          -0.87,
+          0.43,
+          -0.61,
+          -0.26,
+          0.87,
+          0.26
+        ],
+        [
+          -0.87,
+          0.43,
+          -0.61,
+          -0.26,
+          0.87,
+          0.26
+        ],
+        [
+          -0.87,
+          0.43,
+          -0.61,
+          -0.26,
+          0.87,
+          0.26
+        ],
+        [
+          -0.87,
+          0.35,
+          -0.61,
+          -0.26,
+          0.87,
+          0.26
+        ]
+      ],
+      "complement": {
+        "serie": "2e teste",
+        "bruit_lecture": 0.08,
+        "coords": [
+          44.5,
+          -63.3,
+          420.5,
+          -90.35,
+          0.26,
+          -90.0
+        ],
+        "ecart_max_consigne": 0.87
+      }
+    },
+    {
+      "horodatage": "2026-09-08T11:09:03",
+      "categorie": "essai",
+      "detail": "essai 2",
+      "consigne": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mesure": [
+        -0.96,
+        -0.43,
+        0.26,
+        -0.7,
+        0.87,
+        0.87
+      ],
+      "ecart": [
+        -0.96,
+        -0.43,
+        0.26,
+        -0.7,
+        0.87,
+        0.87
+      ],
+      "lectures_brutes": [
+        [
+          -0.96,
+          -0.43,
+          0.26,
+          -0.7,
+          0.87,
+          0.87
+        ],
+        [
+          -0.96,
+          -0.43,
+          0.26,
+          -0.7,
+          0.87,
+          0.87
+        ],
+        [
+          -0.96,
+          -0.43,
+          0.26,
+          -0.7,
+          0.87,
+          0.87
+        ],
+        [
+          -0.96,
+          -0.43,
+          0.26,
+          -0.7,
+          0.87,
+          0.87
+        ],
+        [
+          -0.96,
+          -0.43,
+          0.26,
+          -0.7,
+          0.87,
+          0.87
+        ]
+      ],
+      "complement": {
+        "serie": "2e teste",
+        "bruit_lecture": 0.0,
+        "coords": [
+          46.8,
+          -63.4,
+          420.1,
+          -90.87,
+          0.89,
+          -90.1
+        ],
+        "ecart_max_consigne": 0.96
+      }
+    },
+    {
+      "horodatage": "2026-09-08T11:09:10",
+      "categorie": "essai",
+      "detail": "essai 3",
+      "consigne": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mesure": [
+        -0.96,
+        -0.43,
+        0.26,
+        -0.7,
+        0.87,
+        0.87
+      ],
+      "ecart": [
+        -0.96,
+        -0.43,
+        0.26,
+        -0.7,
+        0.87,
+        0.87
+      ],
+      "lectures_brutes": [
+        [
+          -0.96,
+          -0.43,
+          0.26,
+          -0.7,
+          0.87,
+          0.87
+        ],
+        [
+          -0.96,
+          -0.43,
+          0.26,
+          -0.7,
+          0.87,
+          0.87
+        ],
+        [
+          -0.96,
+          -0.43,
+          0.26,
+          -0.7,
+          0.87,
+          0.87
+        ],
+        [
+          -0.96,
+          -0.43,
+          0.26,
+          -0.7,
+          0.87,
+          0.87
+        ],
+        [
+          -0.96,
+          -0.43,
+          0.26,
+          -0.7,
+          0.87,
+          0.87
+        ]
+      ],
+      "complement": {
+        "serie": "2e teste",
+        "bruit_lecture": 0.0,
+        "coords": [
+          46.8,
+          -63.4,
+          420.1,
+          -90.87,
+          0.89,
+          -90.1
+        ],
+        "ecart_max_consigne": 0.96
+      }
+    }
+  ],
+  "observations": [
+    {
+      "horodatage": "2026-09-08T11:09:15",
+      "texte": "ok"
+    }
+  ],
+  "resume": {
+    "nb_essais": 3,
+    "consigne": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "moyenne_mesuree": [
+      -0.93,
+      -0.149,
+      -0.03,
+      -0.553,
+      0.87,
+      0.667
+    ],
+    "biais_par_articulation": [
+      -0.93,
+      -0.149,
+      -0.03,
+      -0.553,
+      0.87,
+      0.667
+    ],
+    "dispersion_par_articulation": [
+      0.09,
+      0.844,
+      0.87,
+      0.44,
+      0.0,
+      0.61
+    ],
+    "dispersion_max": 0.87,
+    "articulation_dispersion_max": "J3",
+    "biais_max": -0.93,
+    "articulation_biais_max": "J1",
+    "repetable": true,
+    "juste": true,
+    "e1_valide": true
+  }
+}
