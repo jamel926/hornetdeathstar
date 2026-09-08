@@ -108,6 +108,7 @@ ANGLES_POSITION_INITIALE = [
     1.0,      # J5 - inclinaison de l'outil
     1.0       # J6 - rotation finale de l'outil
 ]
+
 '''
 ANGLES_POSITION_INITIALE = [
     20.0,      # J1 - rotation de la base
@@ -268,6 +269,7 @@ def verifierAngles(angles):
     return True
 
 
+
 # =========================================================
 # 9. COMPARAISON A UNE POSE
 # =========================================================
@@ -322,6 +324,30 @@ def allerPositionInitiale(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEOUT
     for i in range(6):
         print("  ", NOMS_ARTICULATIONS[i], "=", angles[i], "degres")
 
+    ### Contrôle des incidents : 
+    a=mc.get_servo_status()
+    print("servo_status : ",a) #renvoie [0,0,[i],0,0,0] si 0 alors pas de pb sur J correspondant  et si [i] = errreur de type i
+    print()
+
+    if a != [0,0,0,0,0,0] :
+        mc.stop()
+        print("Bras à l'arrêt - Incident sur une des articulations")
+        for i in range(0,5):
+            if a[i]!=0 :
+                print("Incident sur J",i+1)
+                if a[i]==[0]:
+                    print("Voltage Problem sur J",i+1)
+                if a[i]==[1]:
+                    print("Sensor Problem sur J",i+1)
+                if a[i]==[2]:
+                    print("Temperature Problem sur J",i+1)
+                if a[i]==[3]:
+                    print("Current Problem sur J",i+1)
+                if a[i]==[4]:
+                    print("Angle Problem sur J",i+1)
+                if a[i]==[5]:
+                    print("OverLoad Problem sur J",i+1)
+
     try:
 
         # -------------------------------------------------
@@ -347,7 +373,10 @@ def allerPositionInitiale(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEOUT
 
         # La vitesse doit imperativement etre un entier
         mc.sync_send_angles(angles, int(vitesse), timeout)
+        
 
+    
+ 
     except Exception as e:
         print("Erreur pendant le deplacement :", e)
         return False
@@ -457,11 +486,33 @@ def main():
     """
     print()
 
-    
+    ### Contrôle des incidents : 
     a=mc.get_servo_status()
-    print("servo_status : ",a) #renvoir [0,0,[i],0,0,0] si 0 alors pas de pb sur J correspondant  et si [i] = errreur de type i
+    print("servo_status : ",a) #renvoie [0,0,[i],0,0,0] si 0 alors pas de pb sur J correspondant  et si [i] = errreur de type i
     print()
 
+    if a != [0,0,0,0,0,0] :
+        mc.stop()
+        print("Bras à l'arrêt - Incident sur une des articulations")
+        for i in range(0,5):
+            if a[i]!=0 :
+                print("Incident sur J",i+1)
+                if a[i]==[0]:
+                    print("Voltage Problem sur J",i+1)
+                if a[i]==[1]:
+                    print("Sensor Problem sur J",i+1)
+                if a[i]==[2]:
+                    print("Temperature Problem sur J",i+1)
+                if a[i]==[3]:
+                    print("Current Problem sur J",i+1)
+                if a[i]==[4]:
+                    print("Angle Problem sur J",i+1)
+                if a[i]==[5]:
+                    print("OverLoad Problem sur J",i+1)
+
+    
+ 
+    
     if succes:
         print("Bras pret. Les moteurs restent alimentes.")
         return 0
