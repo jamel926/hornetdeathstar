@@ -1,9 +1,20 @@
-from pymycobot.mycobot import MyCobot
+from pymycobot import MyCobot280
+import time
 
-mc = MyCobot('/dev/ttyTHS1', 1000000)
+mc = MyCobot280('/dev/ttyTHS1', 1000000)
 
-mc.set_basic_output(2, 0)
-input("Le laser devrait être allumé. Vérifie puis appuie sur Entrée.")
+PIN = 2
 
-mc.set_basic_output(2, 1)
-input("Le laser devrait être éteint. Vérifie puis appuie sur Entrée.")
+print("GPIO 2 -> LOW")
+mc.set_basic_output(PIN, 0)
+time.sleep(3)
+
+print("GPIO 2 -> HIGH")
+mc.set_basic_output(PIN, 1)
+time.sleep(3)
+
+print("GPIO 2 -> LOW")
+mc.set_basic_output(PIN, 0)
+time.sleep(3)
+
+print("Fin du test")
