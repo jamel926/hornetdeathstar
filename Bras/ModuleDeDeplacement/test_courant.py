@@ -107,14 +107,15 @@ ANGLES_POSITION_INITIALE = [
     75.0,     # J4 - poignet
     1.0,      # J5 - inclinaison de l'outil
     1.0       # J6 - rotation finale de l'outil
-]'''
+]
+'''
 ANGLES_POSITION_INITIALE = [
-    2.0,      # J1 - rotation de la base
-    40.0,     # J2 - epaule
-    3.0,   # J3 - coude
-    2.0,     # J4 - poignet
-    1.0,      # J5 - inclinaison de l'outil
-    1.0       # J6 - rotation finale de l'outil
+    20.0,      # J1 - rotation de la base
+    60.0,     # J2 - epaule
+    30.0,   # J3 - coude
+    20.0,     # J4 - poignet
+    10.0,      # J5 - inclinaison de l'outil
+    10.0       # J6 - rotation finale de l'outil
 ]
 
 # =========================================================
@@ -455,8 +456,10 @@ def main():
     la position que l'on vient tout juste d'atteindre.
     """
     print()
+
+    
     a=mc.get_servo_status()
-    print("servo_status : ",a)
+    print("servo_status : ",a) #renvoir [0,0,[i],0,0,0] si 0 alors pas de pb sur J correspondant  et si [i] = errreur de type i
     print()
 
     if succes:
