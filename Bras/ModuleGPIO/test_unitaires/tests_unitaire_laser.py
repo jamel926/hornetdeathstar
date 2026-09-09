@@ -18,14 +18,24 @@ Lancement :
 """
 
 import unittest
+from unittest.mock import MagicMock
 import os
 import sys
+
+
+## Remplacement de pymycobot par un faux module (absent hors Jetson)
+## PU_Laser importe connecterRobot depuis PU_PositionInitiale, qui lui
+## importe pymycobot : sans ce faux module, les tests ne tourneraient
+## que sur le robot.
+faux_pymycobot = MagicMock()
+sys.modules["pymycobot"] = faux_pymycobot
+sys.modules["pymycobot.mycobot280"] = faux_pymycobot.mycobot280
 
 
 ## importation du module a tester
 dossier_racine = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(dossier_racine)
-import PU_Laser
+import Bras.ModuleDeDeplacement.PU_Laser as PU_Laser
 
 
 class FauxBras:
@@ -98,6 +108,10 @@ class TestImportSansEffet(BaseLaser):
     def test_module_n_ouvre_pas_le_port(self):
         """Le module ne doit exposer aucun objet robot cree a l'import."""
         self.assertFalse(hasattr(PU_Laser, "mc"))
+
+    def test_connecterRobot_est_visible(self):
+        """connecterRobot doit exister au niveau du module, pas seulement dans une fonction."""
+        self.assertTrue(callable(PU_Laser.connecterRobot))
 
 
 class TestInitialisation(BaseLaser):
