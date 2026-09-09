@@ -141,7 +141,7 @@ def main():
 
         aller_en_position_visee(mc,ANGLES_POSITION_INITIALE, 50,timeout=TIMEOUT_INIT)
         J5_init_lu = lireJ5(mc)
-        print(f"VITESSE ENVOYEE : {vitesse}")
+        print(f"VITESSE ENVOYEE : {vitesse}-----------------------------------------")
         print(J5_init_lu)
         liste_erreur_J5_initiale.append(erreur_init(-90,J5_init_lu))
         print(f"l'erreur de position initiale est : {erreur_init(-90,J5_init_lu)}")
