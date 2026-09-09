@@ -49,11 +49,23 @@ def append_json_line(path: Path, payload: dict[str, object]) -> None:
         log_file.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
+def normalize_camera_indices(camera_indices: Iterable[int]) -> tuple[int, ...]:
+    """Validate camera indices while preserving order and removing duplicates."""
+
+    normalized = tuple(dict.fromkeys(int(index) for index in camera_indices))
+    if not normalized:
+        raise ValueError("At least one camera index is required")
+    if any(index < 0 for index in normalized):
+        raise ValueError("Camera indices must be zero or greater")
+    return normalized
+
+
 def build_coordinate_records(
     detections: Iterable[Detection],
     coefficients: Sequence[float] | None,
     origin: Sequence[float] | None,
     *,
+    camera_index: int | None = None,
     timestamp: str | None = None,
 ) -> list[dict[str, object]]:
     """Build detection records for text logging or a future ROS publisher."""
@@ -78,6 +90,7 @@ def build_coordinate_records(
         records.append(
             {
                 "timestamp": event_time,
+                "camera_index": camera_index,
                 "label": detection.label,
                 "confidence": round(detection.confidence, 4),
                 "pixel": {"x": detection.pixel_x, "y": detection.pixel_y},
@@ -89,23 +102,23 @@ def build_coordinate_records(
 
 
 class AcquisitionWorker(QtCore.QThread):
-    """Own the camera and YOLO model outside the GUI thread."""
+    """Own all configured cameras and one shared YOLO model outside the GUI thread."""
 
-    frame_ready = QtCore.Signal(object, object)
+    frame_ready = QtCore.Signal(int, object, object, str)
     status_changed = QtCore.Signal(str)
     acquisition_error = QtCore.Signal(str)
 
     def __init__(
         self,
         *,
-        camera_index: int,
+        camera_indices: Sequence[int],
         model_path: Path,
         confidence: float,
         device: str | int | None,
         parent: QtCore.QObject | None = None,
     ) -> None:
         super().__init__(parent)
-        self.camera_index = camera_index
+        self.camera_indices = normalize_camera_indices(camera_indices)
         self.model_path = model_path
         self.confidence = confidence
         self.device = device
@@ -114,7 +127,7 @@ class AcquisitionWorker(QtCore.QThread):
         self.requestInterruption()
 
     def run(self) -> None:
-        camera: LaCamera | None = None
+        cameras: dict[int, LaCamera] = {}
         try:
             self.status_changed.emit(f"Loading YOLO model: {self.model_path.name}")
             detector = YoloDetector(
@@ -123,23 +136,43 @@ class AcquisitionWorker(QtCore.QThread):
                 device=self.device,
             )
 
-            self.status_changed.emit(f"Opening camera {self.camera_index}")
-            camera = LaCamera(camera_index=self.camera_index)
-            if not camera.is_connected():
-                raise RuntimeError(f"Camera {self.camera_index} could not be opened")
+            indices_text = ", ".join(map(str, self.camera_indices))
+            self.status_changed.emit(f"Opening cameras {indices_text}")
+            for camera_index in self.camera_indices:
+                camera = LaCamera(camera_index=camera_index)
+                cameras[camera_index] = camera
+                if not camera.is_connected():
+                    raise RuntimeError(f"Camera {camera_index} could not be opened")
 
             self.status_changed.emit("Live acquisition running")
             while not self.isInterruptionRequested():
-                success, frame = camera.read()
-                if not success or frame is None:
-                    raise RuntimeError("The camera stopped returning frames")
+                captured_frames: list[tuple[int, np.ndarray, str]] = []
+                # Capture every camera before inference to limit inter-camera skew.
+                for camera_index, camera in cameras.items():
+                    success, frame = camera.read()
+                    captured_at = datetime.now().astimezone().isoformat(
+                        timespec="milliseconds"
+                    )
+                    if not success or frame is None:
+                        raise RuntimeError(
+                            f"Camera {camera_index} stopped returning frames"
+                        )
+                    captured_frames.append((camera_index, frame, captured_at))
 
-                annotated_frame, detections = detector.detect(frame)
-                self.frame_ready.emit(annotated_frame, detections)
+                for camera_index, frame, captured_at in captured_frames:
+                    if self.isInterruptionRequested():
+                        break
+                    annotated_frame, detections = detector.detect(frame)
+                    self.frame_ready.emit(
+                        camera_index,
+                        annotated_frame,
+                        detections,
+                        captured_at,
+                    )
         except Exception as error:  # Hardware/model errors must reach the UI.
             self.acquisition_error.emit(f"{type(error).__name__}: {error}")
         finally:
-            if camera is not None:
+            for camera in cameras.values():
                 camera.release()
 
 
@@ -152,7 +185,8 @@ class HornetDeathStarWindow(QtWidgets.QMainWindow):
     def __init__(
         self,
         *,
-        camera_index: int = 1,
+        camera_indices: Sequence[int] | None = None,
+        camera_index: int | None = None,
         model_path: Path | None = None,
         log_dir: Path | None = None,
         calibration_distance_cm: float = 75.0,
@@ -160,25 +194,34 @@ class HornetDeathStarWindow(QtWidgets.QMainWindow):
         device: str | int | None = None,
     ) -> None:
         super().__init__()
-        self.camera_index = camera_index
+        if camera_indices is not None and camera_index is not None:
+            raise ValueError("Use camera_indices or camera_index, not both")
+        selected_indices = (
+            camera_indices
+            if camera_indices is not None
+            else ((camera_index,) if camera_index is not None else (0, 1))
+        )
+        self.camera_indices = normalize_camera_indices(selected_indices)
+        # Kept as a convenience for code that treats the first camera as primary.
+        self.camera_index = self.camera_indices[0]
         self.model_path = (model_path or default_model_path()).expanduser().resolve()
         self.log_dir = (log_dir or DEFAULT_LOG_DIR).expanduser().resolve()
         self.calibration_distance_cm = calibration_distance_cm
         self.confidence = confidence
         self.device = device
 
-        self.calibration_coefficients: tuple[float, ...] | None = None
-        self.calibration_origin: tuple[float, ...] | None = None
+        self.calibration_coefficients: dict[int, tuple[float, ...]] = {}
+        self.calibration_origins: dict[int, tuple[float, ...]] = {}
         self._worker: AcquisitionWorker | None = None
         self._worker_failed = False
-        self._last_image: QtGui.QImage | None = None
+        self._last_images: dict[int, QtGui.QImage] = {}
 
         self._build_interface()
         self._show_startup_state()
 
     def _build_interface(self) -> None:
         self.setWindowTitle("Hornet Death Star - Control Panel")
-        self.resize(1050, 760)
+        self.resize(1250, 800)
 
         central_widget = QtWidgets.QWidget(self)
         root_layout = QtWidgets.QVBoxLayout(central_widget)
@@ -187,21 +230,33 @@ class HornetDeathStarWindow(QtWidgets.QMainWindow):
 
         title = QtWidgets.QLabel("Hornet Death Star")
         title.setObjectName("title")
-        subtitle = QtWidgets.QLabel("Camera calibration and YOLO acquisition prototype")
+        camera_names = ", ".join(f"camera {index}" for index in self.camera_indices)
+        subtitle = QtWidgets.QLabel(
+            f"Calibration and YOLO acquisition prototype - {camera_names}"
+        )
         subtitle.setObjectName("subtitle")
         root_layout.addWidget(title)
         root_layout.addWidget(subtitle)
 
         status_group = QtWidgets.QGroupBox("System status")
         status_layout = QtWidgets.QFormLayout(status_group)
-        self.camera_status = QtWidgets.QLabel("Not tested")
+        self.camera_statuses: dict[int, QtWidgets.QLabel] = {}
+        for camera_index in self.camera_indices:
+            status = QtWidgets.QLabel("Not tested")
+            self.camera_statuses[camera_index] = status
+            status_layout.addRow(f"Camera {camera_index}:", status)
         self.arm_status = QtWidgets.QLabel("Not tested")
-        self.calibration_status = QtWidgets.QLabel("Not calibrated")
+        self.calibration_statuses: dict[int, QtWidgets.QLabel] = {}
+        for camera_index in self.camera_indices:
+            status = QtWidgets.QLabel("Not calibrated")
+            self.calibration_statuses[camera_index] = status
+            status_layout.addRow(f"Calibration {camera_index}:", status)
         self.acquisition_status = QtWidgets.QLabel("Stopped")
-        status_layout.addRow("Camera:", self.camera_status)
         status_layout.addRow("Robot arm:", self.arm_status)
-        status_layout.addRow("Calibration:", self.calibration_status)
         status_layout.addRow("Acquisition:", self.acquisition_status)
+        # Compatibility aliases point at the primary camera's widgets.
+        self.camera_status = self.camera_statuses[self.camera_index]
+        self.calibration_status = self.calibration_statuses[self.camera_index]
         root_layout.addWidget(status_group)
 
         button_layout = QtWidgets.QHBoxLayout()
@@ -222,14 +277,28 @@ class HornetDeathStarWindow(QtWidgets.QMainWindow):
         options_layout.addWidget(QtWidgets.QLabel(f"Logs: {self.log_dir}"))
         root_layout.addLayout(options_layout)
 
-        self.video_label = QtWidgets.QLabel("Live acquisition will appear here")
-        self.video_label.setObjectName("videoFrame")
-        self.video_label.setAlignment(QtCore.Qt.AlignCenter)
-        self.video_label.setMinimumSize(720, 400)
-        root_layout.addWidget(self.video_label, stretch=1)
+        video_layout = QtWidgets.QGridLayout()
+        self.video_labels: dict[int, QtWidgets.QLabel] = {}
+        self.detection_summaries: dict[int, QtWidgets.QLabel] = {}
+        for position, camera_index in enumerate(self.camera_indices):
+            camera_group = QtWidgets.QGroupBox(f"Camera {camera_index}")
+            camera_layout = QtWidgets.QVBoxLayout(camera_group)
 
-        self.detection_summary = QtWidgets.QLabel("No detections")
-        root_layout.addWidget(self.detection_summary)
+            video_label = QtWidgets.QLabel("Live acquisition will appear here")
+            video_label.setObjectName("videoFrame")
+            video_label.setAlignment(QtCore.Qt.AlignCenter)
+            video_label.setMinimumSize(420, 260)
+            camera_layout.addWidget(video_label, stretch=1)
+
+            detection_summary = QtWidgets.QLabel("No detections")
+            camera_layout.addWidget(detection_summary)
+            self.video_labels[camera_index] = video_label
+            self.detection_summaries[camera_index] = detection_summary
+            video_layout.addWidget(camera_group, position // 2, position % 2)
+
+        self.video_label = self.video_labels[self.camera_index]
+        self.detection_summary = self.detection_summaries[self.camera_index]
+        root_layout.addLayout(video_layout, stretch=1)
 
         self.setCentralWidget(central_widget)
         self.statusBar().showMessage("Ready")
@@ -288,28 +357,27 @@ class HornetDeathStarWindow(QtWidgets.QMainWindow):
 
     @QtCore.Slot()
     def test_connections(self) -> None:
-        """Test the camera and robot arm, then close both connections."""
+        """Test every camera and the robot arm, then close all connections."""
 
-        self._set_indicator(self.camera_status, "Testing...", "warning")
+        for status in self.camera_statuses.values():
+            self._set_indicator(status, "Testing...", "warning")
         self._set_indicator(self.arm_status, "Testing...", "warning")
         QtWidgets.QApplication.processEvents()
 
-        camera: LaCamera | None = None
-        try:
-            camera = LaCamera(camera_index=self.camera_index)
-            if camera.is_connected():
-                self._set_indicator(
-                    self.camera_status, f"PASS (camera {self.camera_index})", "ok"
-                )
-            else:
-                self._set_indicator(
-                    self.camera_status, f"FAIL (camera {self.camera_index})", "error"
-                )
-        except Exception as error:
-            self._set_indicator(self.camera_status, f"FAIL: {error}", "error")
-        finally:
-            if camera is not None:
-                camera.release()
+        for camera_index in self.camera_indices:
+            camera: LaCamera | None = None
+            status = self.camera_statuses[camera_index]
+            try:
+                camera = LaCamera(camera_index=camera_index)
+                if camera.is_connected():
+                    self._set_indicator(status, "PASS", "ok")
+                else:
+                    self._set_indicator(status, "FAIL (could not open)", "error")
+            except Exception as error:
+                self._set_indicator(status, f"FAIL: {error}", "error")
+            finally:
+                if camera is not None:
+                    camera.release()
 
         robot = None
         try:
@@ -335,24 +403,46 @@ class HornetDeathStarWindow(QtWidgets.QMainWindow):
 
     @QtCore.Slot()
     def run_calibration(self) -> None:
-        """Capture one settled frame, calibrate it, and append the result to a log."""
+        """Capture and calibrate a settled frame from every configured camera."""
 
         self.calibration_button.setEnabled(False)
-        self._set_indicator(self.calibration_status, "Capturing image...", "warning")
+        for status in self.calibration_statuses.values():
+            self._set_indicator(status, "Waiting...", "warning")
         QtWidgets.QApplication.processEvents()
+
+        successful_calibrations = 0
+        for camera_index in self.camera_indices:
+            status = self.calibration_statuses[camera_index]
+            self._set_indicator(status, "Capturing image...", "warning")
+            QtWidgets.QApplication.processEvents()
+            if self._calibrate_camera(camera_index):
+                successful_calibrations += 1
+
+        self.calibration_button.setEnabled(True)
+        self.statusBar().showMessage(
+            f"Calibration finished: {successful_calibrations}/"
+            f"{len(self.camera_indices)} cameras passed",
+            8000,
+        )
+
+    def _calibrate_camera(self, camera_index: int) -> bool:
+        """Calibrate one camera and append its result to the shared log."""
 
         event_time = datetime.now().astimezone()
         timestamp = event_time.isoformat(timespec="milliseconds")
         filename_time = event_time.strftime("%Y%m%d_%H%M%S_%f")[:-3]
-        image_path = self.log_dir / f"calibration_{filename_time}.jpg"
+        image_path = (
+            self.log_dir / f"calibration_camera_{camera_index}_{filename_time}.jpg"
+        )
         log_path = self.log_dir / "calibration_results.txt"
         camera: LaCamera | None = None
         frame: np.ndarray | None = None
+        status = self.calibration_statuses[camera_index]
 
         try:
-            camera = LaCamera(camera_index=self.camera_index)
+            camera = LaCamera(camera_index=camera_index)
             if not camera.is_connected():
-                raise RuntimeError(f"Camera {self.camera_index} could not be opened")
+                raise RuntimeError(f"Camera {camera_index} could not be opened")
 
             # Discard initial frames so exposure and white balance can settle.
             for _ in range(8):
@@ -372,7 +462,7 @@ class HornetDeathStarWindow(QtWidgets.QMainWindow):
             record: dict[str, object] = {
                 "timestamp": timestamp,
                 "success": success,
-                "camera_index": self.camera_index,
+                "camera_index": camera_index,
                 "reference_distance_cm": self.calibration_distance_cm,
                 "image": str(image_path) if image_saved else None,
                 "coefficients": coefficients,
@@ -382,44 +472,43 @@ class HornetDeathStarWindow(QtWidgets.QMainWindow):
                 record["error"] = "Four red calibration corners were not detected"
             append_json_line(log_path, record)
 
-            self._show_frame(frame)
+            self._show_frame(camera_index, frame)
             if success:
-                self.calibration_coefficients = tuple(coefficients)
-                self.calibration_origin = tuple(origin)
+                self.calibration_coefficients[camera_index] = tuple(coefficients)
+                self.calibration_origins[camera_index] = tuple(origin)
                 self._set_indicator(
-                    self.calibration_status,
+                    status,
                     f"PASS - origin ({origin[0]:.0f}, {origin[1]:.0f})",
                     "ok",
                 )
-                self.statusBar().showMessage(f"Calibration logged to {log_path}", 8000)
+                return True
             else:
-                self.calibration_coefficients = None
-                self.calibration_origin = None
+                self.calibration_coefficients.pop(camera_index, None)
+                self.calibration_origins.pop(camera_index, None)
                 self._set_indicator(
-                    self.calibration_status, "FAIL - four red corners not found", "error"
+                    status, "FAIL - four red corners not found", "error"
                 )
-                self.statusBar().showMessage(f"Calibration failure logged to {log_path}", 8000)
+                return False
         except Exception as error:
-            self.calibration_coefficients = None
-            self.calibration_origin = None
-            self._set_indicator(self.calibration_status, f"FAIL: {error}", "error")
+            self.calibration_coefficients.pop(camera_index, None)
+            self.calibration_origins.pop(camera_index, None)
+            self._set_indicator(status, f"FAIL: {error}", "error")
             try:
                 append_json_line(
                     log_path,
                     {
                         "timestamp": timestamp,
                         "success": False,
-                        "camera_index": self.camera_index,
+                        "camera_index": camera_index,
                         "error": str(error),
                     },
                 )
             except OSError:
                 pass
-            self.statusBar().showMessage(str(error), 8000)
+            return False
         finally:
             if camera is not None:
                 camera.release()
-            self.calibration_button.setEnabled(True)
 
     @QtCore.Slot()
     def toggle_acquisition(self) -> None:
@@ -436,7 +525,7 @@ class HornetDeathStarWindow(QtWidgets.QMainWindow):
 
         self._worker_failed = False
         self._worker = AcquisitionWorker(
-            camera_index=self.camera_index,
+            camera_indices=self.camera_indices,
             model_path=self.model_path,
             confidence=self.confidence,
             device=self.device,
@@ -487,24 +576,31 @@ class HornetDeathStarWindow(QtWidgets.QMainWindow):
         if worker is not None:
             worker.deleteLater()
 
-    @QtCore.Slot(object, object)
+    @QtCore.Slot(int, object, object, str)
     def _handle_detection_frame(
-        self, frame: np.ndarray, detections: list[Detection]
+        self,
+        camera_index: int,
+        frame: np.ndarray,
+        detections: list[Detection],
+        captured_at: str,
     ) -> None:
-        self._show_frame(frame)
+        self._show_frame(camera_index, frame)
+        detection_summary = self.detection_summaries[camera_index]
         if detections:
             summary = ", ".join(
                 f"{detection.label} ({detection.confidence:.2f})"
                 for detection in detections
             )
-            self.detection_summary.setText(f"Detections: {summary}")
+            detection_summary.setText(f"Detections: {summary}")
         else:
-            self.detection_summary.setText("No detections")
+            detection_summary.setText("No detections")
 
         records = build_coordinate_records(
             detections,
-            self.calibration_coefficients,
-            self.calibration_origin,
+            self.calibration_coefficients.get(camera_index),
+            self.calibration_origins.get(camera_index),
+            camera_index=camera_index,
+            timestamp=captured_at,
         )
         for record in records:
             # This works as the hand-off boundary for a later ROS publisher.
@@ -519,26 +615,28 @@ class HornetDeathStarWindow(QtWidgets.QMainWindow):
                 self.coordinate_log_toggle.setChecked(False)
                 self.statusBar().showMessage(f"Coordinate logging stopped: {error}", 10000)
 
-    def _show_frame(self, frame: np.ndarray) -> None:
+    def _show_frame(self, camera_index: int, frame: np.ndarray) -> None:
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         height, width, channels = rgb_frame.shape
         bytes_per_line = channels * width
-        self._last_image = QtGui.QImage(
+        self._last_images[camera_index] = QtGui.QImage(
             rgb_frame.data,
             width,
             height,
             bytes_per_line,
             QtGui.QImage.Format_RGB888,
         ).copy()
-        self._refresh_pixmap()
+        self._refresh_pixmap(camera_index)
 
-    def _refresh_pixmap(self) -> None:
-        if self._last_image is None:
+    def _refresh_pixmap(self, camera_index: int) -> None:
+        image = self._last_images.get(camera_index)
+        if image is None:
             return
-        pixmap = QtGui.QPixmap.fromImage(self._last_image)
-        self.video_label.setPixmap(
+        video_label = self.video_labels[camera_index]
+        pixmap = QtGui.QPixmap.fromImage(image)
+        video_label.setPixmap(
             pixmap.scaled(
-                self.video_label.size(),
+                video_label.size(),
                 QtCore.Qt.KeepAspectRatio,
                 QtCore.Qt.SmoothTransformation,
             )
@@ -546,7 +644,8 @@ class HornetDeathStarWindow(QtWidgets.QMainWindow):
 
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
         super().resizeEvent(event)
-        self._refresh_pixmap()
+        for camera_index in self.camera_indices:
+            self._refresh_pixmap(camera_index)
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
         if self._worker is not None and self._worker.isRunning():
@@ -560,7 +659,19 @@ class HornetDeathStarWindow(QtWidgets.QMainWindow):
 
 def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--camera-index", type=int, default=1)
+    camera_group = parser.add_mutually_exclusive_group()
+    camera_group.add_argument(
+        "--camera-indices",
+        nargs="+",
+        type=int,
+        metavar="INDEX",
+        help="camera indices to use (default: 0 1)",
+    )
+    camera_group.add_argument(
+        "--camera-index",
+        type=int,
+        help="single-camera compatibility option",
+    )
     parser.add_argument("--model", type=Path, default=default_model_path())
     parser.add_argument("--log-dir", type=Path, default=DEFAULT_LOG_DIR)
     parser.add_argument("--distance-cm", type=float, default=75.0)
@@ -575,9 +686,14 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
 
 def main(arguments: Sequence[str] | None = None) -> int:
     args = parse_arguments(arguments)
+    camera_indices = (
+        args.camera_indices
+        if args.camera_indices is not None
+        else ([args.camera_index] if args.camera_index is not None else [0, 1])
+    )
     application = QtWidgets.QApplication([sys.argv[0]])
     window = HornetDeathStarWindow(
-        camera_index=args.camera_index,
+        camera_indices=camera_indices,
         model_path=args.model,
         log_dir=args.log_dir,
         calibration_distance_cm=args.distance_cm,

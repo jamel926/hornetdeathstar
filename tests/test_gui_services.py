@@ -57,11 +57,16 @@ class TestGuiLoggingHelpers(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         try:
-            from GUI import append_json_line, build_coordinate_records
+            from GUI import (
+                append_json_line,
+                build_coordinate_records,
+                normalize_camera_indices,
+            )
         except ImportError as error:
             raise unittest.SkipTest(f"Qt GUI dependencies are not installed: {error}")
         cls.append_json_line = staticmethod(append_json_line)
         cls.build_coordinate_records = staticmethod(build_coordinate_records)
+        cls.normalize_camera_indices = staticmethod(normalize_camera_indices)
 
     def test_coordinate_record_contains_pixel_and_calibrated_values(self):
         detection = Detection("hornet", 0.9, 20, 30, (10, 10, 30, 50))
@@ -70,11 +75,20 @@ class TestGuiLoggingHelpers(unittest.TestCase):
             [detection],
             coefficients=(0.5, 0.25, 0.5, 0.25),
             origin=(10.0, 10.0),
+            camera_index=1,
             timestamp="2026-09-09T10:00:00+02:00",
         )
 
+        self.assertEqual(records[0]["camera_index"], 1)
         self.assertEqual(records[0]["pixel"], {"x": 20, "y": 30})
         self.assertEqual(records[0]["calibrated"], {"x": 5.0, "y": 5.0, "unit": "cm"})
+
+    def test_camera_indices_are_validated_and_deduplicated(self):
+        self.assertEqual(self.normalize_camera_indices([1, 0, 1]), (1, 0))
+        with self.assertRaises(ValueError):
+            self.normalize_camera_indices([])
+        with self.assertRaises(ValueError):
+            self.normalize_camera_indices([0, -1])
 
     def test_json_logger_appends_one_record_per_line(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -92,10 +106,12 @@ class TestGuiLoggingHelpers(unittest.TestCase):
 
 class _FakeCamera:
     frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    instances = []
 
     def __init__(self, camera_index=0):
         self.camera_index = camera_index
         self.released = False
+        self.instances.append(self)
 
     def is_connected(self):
         return True
@@ -122,6 +138,8 @@ class TestGuiWindow(unittest.TestCase):
     def test_window_has_exactly_three_buttons_and_disconnects_robot_after_test(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             window = self.gui.HornetDeathStarWindow(log_dir=Path(temporary_directory))
+            self.assertEqual(window.camera_indices, (0, 1))
+            self.assertEqual(set(window.video_labels), {0, 1})
             buttons = window.findChildren(self.QtWidgets.QPushButton)
             self.assertEqual(
                 [button.text() for button in buttons],
@@ -129,13 +147,20 @@ class TestGuiWindow(unittest.TestCase):
             )
 
             robot = MagicMock()
+            _FakeCamera.instances.clear()
             with (
                 patch.object(self.gui, "LaCamera", _FakeCamera),
                 patch.object(self.gui, "connecterRobot", return_value=robot),
             ):
                 window.test_connections()
 
-            self.assertIn("PASS", window.camera_status.text())
+            self.assertTrue(
+                all(status.text() == "PASS" for status in window.camera_statuses.values())
+            )
+            self.assertEqual(
+                [camera.camera_index for camera in _FakeCamera.instances], [0, 1]
+            )
+            self.assertTrue(all(camera.released for camera in _FakeCamera.instances))
             self.assertEqual(window.arm_status.text(), "PASS")
             robot.close.assert_called_once_with()
             window.close()
@@ -167,14 +192,18 @@ class TestGuiWindow(unittest.TestCase):
             with patch.object(self.gui, "LaCamera", _FakeCamera):
                 window.run_calibration()
 
-            record = json.loads(
-                (log_dir / "calibration_results.txt")
+            records = [
+                json.loads(line)
+                for line in (log_dir / "calibration_results.txt")
                 .read_text(encoding="utf-8")
-                .splitlines()[0]
+                .splitlines()
+            ]
+            self.assertEqual([record["camera_index"] for record in records], [0, 1])
+            self.assertTrue(all(record["success"] for record in records))
+            self.assertTrue(
+                all(record["origin_pixel"] == [10.0, 10.0] for record in records)
             )
-            self.assertTrue(record["success"])
-            self.assertEqual(record["origin_pixel"], [10.0, 10.0])
-            self.assertIsNotNone(window.calibration_coefficients)
+            self.assertEqual(set(window.calibration_coefficients), {0, 1})
             window.close()
 
     def test_coordinate_signal_is_always_emitted_but_file_logging_is_optional(self):
@@ -187,14 +216,78 @@ class TestGuiWindow(unittest.TestCase):
             received_records = []
             window.coordinate_ready.connect(received_records.append)
 
-            window._handle_detection_frame(frame, [detection])
+            captured_at = "2026-09-09T10:00:00+02:00"
+            window._handle_detection_frame(1, frame, [detection], captured_at)
+            self.assertEqual(received_records[0]["camera_index"], 1)
             self.assertEqual(received_records[0]["pixel"], {"x": 20, "y": 30})
             self.assertFalse((log_dir / "detection_coordinates.txt").exists())
 
             window.coordinate_log_toggle.setChecked(True)
-            window._handle_detection_frame(frame, [detection])
+            window._handle_detection_frame(0, frame, [detection], captured_at)
             self.assertTrue((log_dir / "detection_coordinates.txt").is_file())
             window.close()
+
+    def test_single_camera_mode_keeps_the_dynamic_layout(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            window = self.gui.HornetDeathStarWindow(
+                camera_indices=(3,),
+                log_dir=Path(temporary_directory),
+            )
+
+            self.assertEqual(window.camera_indices, (3,))
+            self.assertEqual(set(window.camera_statuses), {3})
+            self.assertEqual(set(window.video_labels), {3})
+            window.close()
+
+    def test_acquisition_worker_shares_one_detector_between_both_cameras(self):
+        class OneFrameCamera(_FakeCamera):
+            instances = []
+
+            def __init__(self, camera_index=0):
+                super().__init__(camera_index)
+                self.read_count = 0
+
+            def read(self):
+                self.read_count += 1
+                if self.read_count > 1:
+                    return False, None
+                return True, self.frame.copy()
+
+        class FakeDetector:
+            instances = []
+
+            def __init__(self, *args, **kwargs):
+                self.instances.append(self)
+
+            def detect(self, frame):
+                return frame, []
+
+        worker = self.gui.AcquisitionWorker(
+            camera_indices=(0, 1),
+            model_path=Path("unused.pt"),
+            confidence=0.5,
+            device="cpu",
+        )
+        received_camera_indices = []
+        errors = []
+        worker.frame_ready.connect(
+            lambda camera_index, frame, detections, captured_at: (
+                received_camera_indices.append(camera_index)
+            )
+        )
+        worker.acquisition_error.connect(errors.append)
+
+        with (
+            patch.object(self.gui, "LaCamera", OneFrameCamera),
+            patch.object(self.gui, "YoloDetector", FakeDetector),
+        ):
+            worker.run()
+
+        self.assertEqual(len(FakeDetector.instances), 1)
+        self.assertEqual(received_camera_indices, [0, 1])
+        self.assertEqual(len(OneFrameCamera.instances), 2)
+        self.assertTrue(all(camera.released for camera in OneFrameCamera.instances))
+        self.assertIn("Camera 0 stopped returning frames", errors[0])
 
 
 if __name__ == "__main__":
