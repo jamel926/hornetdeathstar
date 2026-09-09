@@ -5,7 +5,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import cv2
 import numpy as np
@@ -57,7 +57,7 @@ class TestGuiLoggingHelpers(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         try:
-            from GUI_brouillon_vibecode import append_json_line, build_coordinate_records
+            from GUI import append_json_line, build_coordinate_records
         except ImportError as error:
             raise unittest.SkipTest(f"Qt GUI dependencies are not installed: {error}")
         cls.append_json_line = staticmethod(append_json_line)
@@ -111,7 +111,7 @@ class TestGuiWindow(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         try:
-            import GUI_brouillon_vibecode as gui
+            import GUI as gui
             from qtpy import QtWidgets
         except ImportError as error:
             raise unittest.SkipTest(f"Qt GUI dependencies are not installed: {error}")
@@ -119,7 +119,7 @@ class TestGuiWindow(unittest.TestCase):
         cls.QtWidgets = QtWidgets
         cls.application = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
-    def test_window_has_exactly_three_buttons_and_connection_placeholder(self):
+    def test_window_has_exactly_three_buttons_and_disconnects_robot_after_test(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             window = self.gui.HornetDeathStarWindow(log_dir=Path(temporary_directory))
             buttons = window.findChildren(self.QtWidgets.QPushButton)
@@ -128,11 +128,28 @@ class TestGuiWindow(unittest.TestCase):
                 ["Test connections", "Calibrate", "Start acquisition"],
             )
 
-            with patch.object(self.gui, "LaCamera", _FakeCamera):
+            robot = MagicMock()
+            with (
+                patch.object(self.gui, "LaCamera", _FakeCamera),
+                patch.object(self.gui, "connecterRobot", return_value=robot),
+            ):
                 window.test_connections()
 
             self.assertIn("PASS", window.camera_status.text())
-            self.assertEqual(window.arm_status.text(), "PASS (placeholder)")
+            self.assertEqual(window.arm_status.text(), "PASS")
+            robot.close.assert_called_once_with()
+            window.close()
+
+    def test_arm_connection_failure_is_reported(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            window = self.gui.HornetDeathStarWindow(log_dir=Path(temporary_directory))
+            with (
+                patch.object(self.gui, "LaCamera", _FakeCamera),
+                patch.object(self.gui, "connecterRobot", return_value=None),
+            ):
+                window.test_connections()
+
+            self.assertIn("FAIL", window.arm_status.text())
             window.close()
 
     def test_calibration_capture_is_logged(self):

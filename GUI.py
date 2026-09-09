@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 from qtpy import QtCore, QtGui, QtWidgets
 
+from Bras.ModuleDeDeplacement.PU_PositionInitiale import connecterRobot
 from camera.ModuleCam.Calibrage import CoordenéesAuRobo, CoordonnerCalibrage
 from camera.ModuleCam.ModuleCamera import LaCamera
 from camera.ReconnaissanceObjet.ModuleAI import Detection, YoloDetector
@@ -287,7 +288,7 @@ class HornetDeathStarWindow(QtWidgets.QMainWindow):
 
     @QtCore.Slot()
     def test_connections(self) -> None:
-        """Test the camera and report a placeholder arm success."""
+        """Test the camera and robot arm, then close both connections."""
 
         self._set_indicator(self.camera_status, "Testing...", "warning")
         self._set_indicator(self.arm_status, "Testing...", "warning")
@@ -310,8 +311,26 @@ class HornetDeathStarWindow(QtWidgets.QMainWindow):
             if camera is not None:
                 camera.release()
 
-        # Placeholder until the robot-arm/ROS connection is implemented.
-        self._set_indicator(self.arm_status, "PASS (placeholder)", "ok")
+        robot = None
+        try:
+            robot = connecterRobot()
+            if robot is None:
+                self._set_indicator(self.arm_status, "FAIL (connection refused)", "error")
+            else:
+                self._set_indicator(self.arm_status, "PASS", "ok")
+        except Exception as error:
+            self._set_indicator(self.arm_status, f"FAIL: {error}", "error")
+        finally:
+            if robot is not None:
+                try:
+                    robot.close()
+                except Exception as error:
+                    self._set_indicator(
+                        self.arm_status,
+                        f"FAIL (disconnect error: {error})",
+                        "error",
+                    )
+
         self.statusBar().showMessage("Connection test finished", 5000)
 
     @QtCore.Slot()
