@@ -94,7 +94,7 @@ NOMS_ARTICULATIONS = ["J1", "J2", "J3", "J4", "J5", "J6"]
 """
 Pose de depart du bras, en degres.
 
-Valeurs relevees sur le demonstrateur.o
+Valeurs relevees sur le demonstrateur.
 
 Pour les relever a nouveau : placer le bras a la main
 dans la pose voulue (moteurs relaches via

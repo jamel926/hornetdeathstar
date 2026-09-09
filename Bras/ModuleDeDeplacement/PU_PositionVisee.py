@@ -244,13 +244,12 @@ def main():
     """Sequence complete de mise en position initiale, avec confirmation de l'operateur."""
     Mise_en_Position_Initiale()
 
-    
-    VAL_J1 = float(input("Valeur de J1 voulu : "))
-    VAL_J2 = float(input("Valeur de J2 voulu : "))
-    VAL_J3 = float(input("Valeur de J3 voulu : "))
-    VAL_J4 = float(input("Valeur de J4 voulu : "))
-    VAL_J5 = float(input("Valeur de J5 voulu : "))
-    VAL_J6 = float(input("Valeur de J6 voulu : "))
+    VAL_J1 = float(input("Valeur de J1 voulue : "))
+    VAL_J2 = float(input("Valeur de J2 voulue : "))
+    VAL_J3 = float(input("Valeur de J3 voulue : "))
+    VAL_J4 = float(input("Valeur de J4 voulue : "))
+    VAL_J5 = float(input("Valeur de J5 voulue : "))
+    VAL_J6 = float(input("Valeur de J6 voulue : "))
 
     ANGLES_POSITION_VISEES= [
     VAL_J1,      # J1 - rotation de la base
@@ -260,33 +259,14 @@ def main():
     VAL_J5,      # J5 - inclinaison de l'outil
     VAL_J6       # J6 - rotation finale de l'outil
 ]
-    Verification_Angle_SECU(ANGLES_POSITION_VISEES)
-
-    # -----------------------------------------------------
-    # Connexion
-    # -----------------------------------------------------
-
-    mc = connecterRobot()
-
-    if mc is None:
-        print()
-        print("Robot indisponible, programme interrompu.")
-        return 1
-
-    # -----------------------------------------------------
-    # Etat de depart
-    # -----------------------------------------------------
+    ANGLES=Verification_Angle_SECU(ANGLES_POSITION_VISEES)
 
     print()
     print("Position actuelle :", lireAngles(mc))
     print("Position visee    :", ANGLES_POSITION_VISEES)
 
-    # -----------------------------------------------------
-    # Confirmation de l'operateur
-    # -----------------------------------------------------
-
     print()
-    confirmation = input("Lancer la mise en position initiale ? (o/n) : ")
+    confirmation = input("Lancer la mise en position visée ? (o/n) : ")
 
     if confirmation.lower() != "o":
         print("Mise en position visee annulee par l'operateur.")
@@ -295,14 +275,11 @@ def main():
     # -----------------------------------------------------
     # Mouvement
     # -----------------------------------------------------
-
     print()
     print("-----------------------------------------")
-
-    succes = aller_en_position_visee(mc,ANGLES_POSITION_VISEES)
-
+    print(ANGLES)
+    succes = aller_en_position_visee(mc,ANGLES)
     print("-----------------------------------------")
-
     # -----------------------------------------------------
     # Compte rendu
     # -----------------------------------------------------
