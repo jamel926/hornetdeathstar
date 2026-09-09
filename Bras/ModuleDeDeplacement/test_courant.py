@@ -110,12 +110,12 @@ ANGLES_POSITION_INITIALE = [
     1.0       # J6 - rotation finale de l'outil
 ]'''
 ANGLES_POSITION_INITIALE = [
-    2.0,      # J1 - rotation de la base
-    40.0,     # J2 - epaule
-    -118.56,   # J3 - coude
-    75.0,     # J4 - poignet
-    50.0,      # J5 - inclinaison de l'outil
-    1.0       # J6 - rotation finale de l'outil
+    45.0,      # J1 - rotation de la base
+    0.0,     # J2 - epaule
+    -136,   # J3 - coude
+    51.0,     # J4 - poignet
+    1.0,      # J5 - inclinaison de l'outil
+    51.0       # J6 - rotation finale de l'outil
 ]
 # =========================================================
 # 6. CONNEXION AU ROBOT
@@ -334,10 +334,10 @@ def statuts_moteurs(mc):
 def detection_problemes(a):
    ### Test la liste de statuts pour savoir si il y a un problème
    if a == [0,0,0,0,0,0]:
-       res = 0
+       res = False
        print("Aucun problème de statuts des moteurs")
    else :
-       res = 1
+       res = True
        print("Problème de statuts détecté")
    return(res)
 
@@ -355,6 +355,29 @@ def Explanation_problemes(a):
            print("Problème de statuts : J",i+1)
            v = a[i][0]
            print(Statuts(v),"problème")
+
+def Arret_urgence(mc):
+    print("======ARRET D'URGENCE======")
+    mc.stop()
+
+
+
+def blocage_vitesse_moteur(mc, angle_cible): 
+    speed = mc.get_servo_speeds()
+    angle_actuel = lireAngles(mc)
+    ecart_minimal = 3
+    print(f"vitesse  ={speed}\n angle = {angle_actuel}")
+    if speed is None: 
+        return False
+    for i in range(6):
+        if i !=2:  
+            ecart = abs(angle_actuel[i]-angle_cible[i])
+            if ecart > ecart_minimal and abs(speed[i])<250: 
+                print(f"Blocage sur le moteur J{i+1}")
+                return True
+    return False 
+
+
 
 # =========================================================
 # 10bis. MISE EN POSITION INITIALE
@@ -405,20 +428,44 @@ def allerPositionInitiale(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEOUT
         print("Deplacement en cours (vitesse", int(vitesse), ")...")
         print(f"début du mvt")
         # La vitesse doit imperativement etre un entier
-        mc.send_angles(angles, int(vitesse)) ##cette fonction fait bouger le robot
-        print("robot bouge nannnnnn ? ", mc.is_moving())
+        
+        mc.send_angles(angles, int(vitesse))
+        debut = time.time()
+        # Attendre que le mouvement démarre (QUE IS MOVING PASSE À 1)
+        while mc.is_moving() != 1:
+            time.sleep(0.05)
+
+        print("Mouvement détecté")
+
+
+       # Surveillance pendant le mouvement
         while mc.is_moving() == 1:
-            a=statuts_moteurs(mc)
-            print("a=", a)
-            print("robot bouge nannnnnn ? ", mc.is_moving())
-            if detection_problemes(a)==1:
-                # si on a détecté un problème 
-                mc.stop()
-                Explanation_problemes(a)
-                if mc.stop()==1: 
-                    print(f"le robot est arrêté")
-                return False
-        print(f"fin du mvt")
+           print(f"vitesse======{mc.get_servo_speeds()}")
+           a = statuts_moteurs(mc)
+           a[2]=0 # pour ignoer J3 en panne pour le robot 1
+
+           print("STATUTS :", a)
+           print("PROBLEME :", detection_problemes(a))
+
+           if detection_problemes(a):
+               Explanation_problemes(a)
+               print("Vous avez merdé les loustics")
+               Arret_urgence(mc)
+              
+               return False
+           else:
+               print("Pas de problème c'est ok la team")
+
+           time.sleep(0.1)
+           if time.time() - debut > 0.3:
+               if blocage_vitesse_moteur(mc, angle_cible=angles):
+                   Arret_urgence(mc)
+                   print(f"caca")
+                   return False
+
+
+    
+        
 
 
     except Exception as e:
