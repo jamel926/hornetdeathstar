@@ -35,6 +35,7 @@ Angles mesures : [2.54, 48.42, -124.36, 74.26, 0.35, 0.0]
 
 # =========================================================
 # 1. IMPORTS
+
 # =========================================================
 
 from pymycobot.mycobot280 import MyCobot280
@@ -100,7 +101,7 @@ dans la pose voulue (moteurs relaches via
 release_all_servos) puis lire mc.get_angles().
 """
 
-1ANGLES_POSITION_INITIALE = [
+ANGLES_POSITION_INITIALE = [
     0.0,      # J1 - rotation de la base
     50.0,     # J2 - epaule
     -145.0,   # J3 - coude
