@@ -10,3 +10,4 @@ logs/
 imgs/__pycache__/
 *.pyc
 .venv/
+/runs/
