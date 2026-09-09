@@ -35,7 +35,7 @@ sys.modules["pymycobot.mycobot280"] = faux_pymycobot.mycobot280
 ## importation du module a tester
 dossier_racine = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(dossier_racine)
-import PU_Laser
+import Bras.ModuleDeDeplacement.PU_Laser as PU_Laser
 
 
 class FauxBras:

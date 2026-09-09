@@ -119,6 +119,7 @@ puissance.
 import os
 import sys
 import time
+import ModuleDeDeplacement
 
 
 # ---------------------------------------------------------
@@ -495,6 +496,70 @@ def afficherEtatLaser():
 
 
 # =========================================================
+# 10. CONNEXION POUR L'USAGE AUTONOME
+# =========================================================
+
+"""
+connecterRobot() vit dans ModuleDeDeplacement, dossier
+voisin. Le projet n'etant pas installe comme paquet Python,
+on ajoute ce dossier au chemin d'import plutot que de
+redefinir ici le port et le baudrate : deux definitions du
+port serie finiraient par diverger.
+"""
+
+import importlib.util
+DOSSIER_DEPLACEMENT = os.path.abspath(
+    os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..",
+        "ModuleDeDeplacement"
+    )
+)
+
+
+def connecterPourLaser():
+    """Charge PU_PositionInitiale.py explicitement et ouvre la liaison série."""
+
+    chemin = os.path.join(
+        DOSSIER_DEPLACEMENT,
+        "PU_PositionInitiale.py"
+    )
+
+    print("Recherche de PU_PositionInitiale ici :")
+    print(chemin)
+
+    if not os.path.isfile(chemin):
+        print("ERREUR : fichier PU_PositionInitiale.py introuvable.")
+        return None
+
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "PU_PositionInitiale",
+            chemin
+        )
+
+        if spec is None or spec.loader is None:
+            print("Impossible de charger PU_PositionInitiale.")
+            return None
+
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+    except Exception as e:
+        print("Erreur lors du chargement de PU_PositionInitiale :")
+        print(type(e).__name__, ":", e)
+        return None
+
+    if not hasattr(module, "connecterRobot"):
+        print("ERREUR : connecterRobot() n'existe pas dans PU_PositionInitiale.py")
+        return None
+
+    return module.connecterRobot()
+
+
+
+# =========================================================
+# 11. CONSOLE INTERACTIVE
 # 10. CONSOLE INTERACTIVE
 # =========================================================
 
