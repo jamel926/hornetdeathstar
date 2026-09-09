@@ -119,7 +119,6 @@ puissance.
 import os
 import sys
 import time
-import ModuleDeDeplacement
 
 
 # ---------------------------------------------------------

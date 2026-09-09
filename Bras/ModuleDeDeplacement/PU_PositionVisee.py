@@ -48,7 +48,9 @@ from PU_PositionInitiale import (
     VITESSE_INIT,
     TIMEOUT_INIT,
     ecartMaximal,
-    TOLERANCE_ANGLE
+    TOLERANCE_ANGLE,
+    PORT,
+    BAUDRATE
 )
 
 def Mise_en_Position_Initiale():
@@ -260,7 +262,7 @@ def main():
     VAL_J6       # J6 - rotation finale de l'outil
 ]
     ANGLES=Verification_Angle_SECU(ANGLES_POSITION_VISEES)
-
+    mc = MyCobot280(PORT, BAUDRATE)
     print()
     print("Position actuelle :", lireAngles(mc))
     print("Position visee    :", ANGLES_POSITION_VISEES)
