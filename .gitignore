@@ -1,2 +1,12 @@
+*.jpg
+*.JPG
+*.jpeg
+*.JPEG
+*.png
+*.PNG
 __pycache__/
+*.py[cod]
+logs/
+imgs/__pycache__/
 *.pyc
+.venv/

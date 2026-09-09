@@ -33,7 +33,7 @@ sys.modules["pymycobot.mycobot280"] = faux_pymycobot.mycobot280
 ## importation des modules a tester
 dossier_racine = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(dossier_racine)
-import test_repetabilite_initiale as repetabilite
+import Bras.ModuleDeDeplacement.tests_files.test_repetabilite_initiale as repetabilite
 import test_diagnostic_J3 as diagnostic
 import PU_Journal
 
