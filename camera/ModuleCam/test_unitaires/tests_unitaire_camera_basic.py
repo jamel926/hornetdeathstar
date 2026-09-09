@@ -1,19 +1,8 @@
 import unittest
 from unittest.mock import patch, MagicMock
-import sys
-import os
 import cv2
-import sys
-import io
-import importlib.util
 
-## importation de la classe à tester
-dossier_racine = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-specification = importlib.util.spec_from_file_location(
-    'Module_Camera', os.path.join(dossier_racine, 'Module_Camera.py'))
-module_camera = importlib.util.module_from_spec(specification)
-specification.loader.exec_module(module_camera)
-LaCamera = module_camera.LaCamera
+from camera.ModuleCam.ModuleCamera import LaCamera
 
 
 class TestLaCamera(unittest.TestCase):

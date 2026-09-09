@@ -4,3 +4,7 @@
 *.JPEG
 *.png
 *.PNG
+__pycache__/
+*.py[cod]
+logs/
+imgs/

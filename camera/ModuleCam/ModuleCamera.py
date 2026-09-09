@@ -7,6 +7,18 @@ class LaCamera:
         self.portCamera=camera_index
         self.camera = cv2.VideoCapture(self.portCamera)
 
+    def is_connected(self):
+        """Return whether OpenCV successfully opened the camera."""
+        return self.camera.isOpened()
+
+    def read(self):
+        """Read and return ``(success, frame)`` from the camera."""
+        return self.camera.read()
+
+    def release(self):
+        """Release the underlying OpenCV camera handle."""
+        self.camera.release()
+
 
     def quitterAffichage(self):
         """Vérifie si l'utilisateur a appuyé sur la touche 'q' pour quitter l'affichage du flux vidéo en direct. Si la touche 'q' est pressée, cela signifie que l'utilisateur souhaite quitter, sinon le flux vidéo continue d'être affiché."""

@@ -1,7 +1,7 @@
 import cv2
 from ultralytics import YOLO
-from cam.Module_Camera import LaCamera
-from cam.Calibrage import *
+from camera.ModuleCam.Calibrage import CoordenéesAuRobo, CoordonnerCalibrage
+from camera.ModuleCam.ModuleCamera import LaCamera
 
 # Load YOLOv8 model
 model = YOLO("src/IA/Model2/runs/detect/train/weights/best.pt")
