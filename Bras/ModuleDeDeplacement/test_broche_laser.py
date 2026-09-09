@@ -46,7 +46,7 @@ import os
 import time
 from datetime import datetime
 
-from Bras.ModuleDeDeplacement.PU_Laser import connecterRobot, MODE_SORTIE
+from PU_Laser import connecterRobot, MODE_SORTIE
 
 
 # =========================================================

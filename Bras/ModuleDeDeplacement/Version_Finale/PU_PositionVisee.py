@@ -37,7 +37,7 @@ avant toute execution.
 
 from pymycobot.mycobot280 import MyCobot280
 import time
-from PU_PositionInitiale import (
+from Bras.ModuleDeDeplacement.PU_PositionInitiale import (
     connecterRobot,
     lireAngles,
     verifierAngles,
