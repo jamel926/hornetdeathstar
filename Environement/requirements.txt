@@ -1,0 +1,43 @@
+# Dependances Python du projet Hornet Death Star -- environnement de base.
+#
+# Cible : le PC embarque du bras (myCobot 280 Jetson Nano, Linux aarch64, Python 3.10).
+# Les deux robots doivent avoir EXACTEMENT ce contenu : c'est le but des versions figees
+# ci-dessous (==). Ne pas remplacer par des >= : une difference de version entre les deux
+# robots rendrait un bug reproductible sur l'un et pas sur l'autre.
+#
+# Ces versions sont celles de l'environnement conda qui tourne deja sur le robot
+# (Environement/brasRobotEnv.yml), donc des versions validees sur le materiel.
+#
+# Installation : ne pas lancer pip a la main, utiliser Environement/install_env.sh
+# (il cree le .venv et verifie la version de Python).
+
+### --- Commande du bras robotique --- ###
+pymycobot==4.0.4
+pyserial==3.5          # liaison serie /dev/ttyTHS1 vers la carte du bras
+
+### --- Vision (module camera) --- ###
+# contrib = inclut les modules supplementaires d'OpenCV (aruco, tracking...).
+# Ne PAS installer aussi opencv-python : les deux paquets se marchent dessus.
+opencv-contrib-python==4.13.0.92
+
+### --- Calcul et traitement du signal (Detection_son) --- ###
+numpy==2.2.6
+scipy==1.15.3
+numba==0.65.1          # compilation JIT, tire par le traitement du signal
+llvmlite==0.47.0       # backend de numba, sa version est liee a celle de numba
+
+### --- GPIO --- ###
+# Jetson.GPIO : broches de la Jetson Nano elle-meme.
+jetson-gpio==2.1.12
+# RPi.GPIO : herite de l'environnement d'origine. Compile depuis les sources
+# (necessite python3-dev + build-essential) et ne sert a rien hors Raspberry Pi.
+# Si l'installation echoue sur le robot, cette ligne peut etre commentee sans risque.
+rpi-gpio==0.7.1
+
+### --- Peripheriques d'entree (clavier / manette pour le jog manuel) --- ###
+evdev==1.9.3
+pynput==1.8.2
+python-xlib==0.33      # backend X11 de pynput
+
+### --- Utilitaire --- ###
+six==1.17.0

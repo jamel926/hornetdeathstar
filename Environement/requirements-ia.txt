@@ -1,0 +1,22 @@
+# Dependances supplementaires pour la detection YOLO (camera/IA/).
+# Installees uniquement avec : ./Environement/install_env.sh --avec-ia
+#
+# /!\ Contrairement a requirements.txt, ces deux versions ne viennent PAS de
+# l'environnement conda deja valide sur le robot : c'est un point de depart.
+# Une fois la detection testee, figer ici les versions reellement utilisees
+# (pip freeze | grep -Ei 'ultralytics|torch|matplotlib').
+#
+# Pourquoi separe du requirements.txt de base : ultralytics tire PyTorch, soit
+# environ 2 a 3 Go. Inutile sur un robot qui ne fait que bouger le bras, et la
+# memoire eMMC d'une Jetson Nano est petite.
+#
+# /!\ PIEGE JETSON NANO : le PyTorch de PyPI n'a pas de wheel aarch64 avec le
+# support CUDA. Sur la Jetson il faut installer la wheel fournie par NVIDIA pour
+# la version de JetPack installee AVANT de lancer cette ligne, sinon soit
+# l'installation echoue, soit YOLO tourne sur CPU (donc trop lent pour du suivi
+# temps reel). Sur un PC portable de developpement, l'installation directe suffit.
+ultralytics==8.3.203
+
+# Trace des spectres audio dans Detection_son/analysefreq.py.
+# Outil d'analyse hors ligne, pas necessaire au fonctionnement du robot.
+matplotlib==3.10.7
