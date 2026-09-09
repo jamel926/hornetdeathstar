@@ -89,6 +89,7 @@ visuelle, avec les lunettes.
 
 Utilisation comme module :
 -------------------------
+    from PU_Laser import connecterRobot          # re-exporte depuis PU_PositionInitiale
     from PU_Laser import initialiserLaser, armerLaser, tirer
 
     mc = connecterRobot()
@@ -118,6 +119,48 @@ puissance.
 import os
 import sys
 import time
+
+
+# ---------------------------------------------------------
+# Import d'un module du dossier voisin
+# ---------------------------------------------------------
+
+"""
+connecterRobot() vit dans ModuleDeDeplacement, un dossier
+VOISIN de celui-ci :
+
+    Bras/
+      ModuleDeDeplacement/PU_PositionInitiale.py   <- la fonction
+      ModuleGPIO/PU_Laser.py                       <- ce fichier
+
+Le projet n'est pas installe comme paquet Python, donc
+Python ne connait pas ce dossier voisin : sans la ligne
+sys.path ci-dessous, l'import echoue avec
+"ModuleNotFoundError: No module named 'PU_PositionInitiale'".
+
+On ajoute donc le dossier au chemin d'import AVANT
+d'importer, et une fois pour toutes au chargement du module
+-- pas a l'interieur d'une fonction, sinon le nom
+connecterRobot n'existe pas au niveau du module et ni l'IDE
+ni le reste du code ne le voient.
+
+On ne redefinit PAS le port et le baudrate ici : deux
+definitions du port serie finiraient par diverger.
+
+Sous PyCharm, marquer Bras/ModuleDeDeplacement comme
+"Sources Root" (clic droit > Mark Directory as) pour que
+l'IDE resolve l'import lui aussi. C'est du confort d'edition,
+l'execution marche sans.
+"""
+
+DOSSIER_DEPLACEMENT = os.path.abspath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ModuleDeDeplacement")
+)
+
+if DOSSIER_DEPLACEMENT not in sys.path:
+    sys.path.insert(0, DOSSIER_DEPLACEMENT)
+
+from PU_PositionInitiale import connecterRobot
 
 
 # =========================================================
@@ -452,41 +495,7 @@ def afficherEtatLaser():
 
 
 # =========================================================
-# 10. CONNEXION POUR L'USAGE AUTONOME
-# =========================================================
-
-"""
-connecterRobot() vit dans ModuleDeDeplacement, dossier
-voisin. Le projet n'etant pas installe comme paquet Python,
-on ajoute ce dossier au chemin d'import plutot que de
-redefinir ici le port et le baudrate : deux definitions du
-port serie finiraient par diverger.
-"""
-
-DOSSIER_DEPLACEMENT = os.path.abspath(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ModuleDeDeplacement")
-)
-
-
-def connecterPourLaser():
-    """Ouvre la liaison serie via PU_PositionInitiale et retourne l'objet robot (None si echec)."""
-
-    if DOSSIER_DEPLACEMENT not in sys.path:
-        sys.path.append(DOSSIER_DEPLACEMENT)
-
-    try:
-        from PU_PositionInitiale import connecterRobot
-
-    except Exception as e:
-        print("Import de PU_PositionInitiale impossible.")
-        print("Erreur :", e)
-        return None
-
-    return connecterRobot()
-
-
-# =========================================================
-# 11. CONSOLE INTERACTIVE
+# 10. CONSOLE INTERACTIVE
 # =========================================================
 
 def lireDuree(message):
@@ -527,7 +536,7 @@ def main():
     print("degagee, personne dans l'axe du faisceau.")
     print()
 
-    mc = connecterPourLaser()
+    mc = connecterRobot()
 
     if mc is None:
         print("Connexion impossible : verifier qu'aucun autre")

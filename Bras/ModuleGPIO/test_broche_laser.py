@@ -46,7 +46,7 @@ import os
 import time
 from datetime import datetime
 
-from PU_Laser import connecterPourLaser, MODE_SORTIE
+from PU_Laser import connecterRobot, MODE_SORTIE
 
 
 # =========================================================
@@ -228,7 +228,7 @@ def main():
         print("Essai annule.")
         return 1
 
-    mc = connecterPourLaser()
+    mc = connecterRobot()
 
     if mc is None:
         print("Connexion impossible : verifier qu'aucun autre")
