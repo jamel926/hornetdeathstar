@@ -1,9 +1,15 @@
 import cv2
 from ultralytics import YOLO
 from cam.Module_Camera import LaCamera
+from cam.Calibrage import *
 
 # Load YOLOv8 model
 model = YOLO("src/IA/Model2/runs/detect/train/weights/best.pt")
+
+distanceZone = 75   # En cm
+coffD = []
+coordonnerZero = []
+coordonnerReel = []
 
 def detect_objects(frame):
     results = model(frame)
@@ -37,19 +43,31 @@ def main():
     ret,frame = camera.camera.read()
     width, height = camera.tailleCamera()
 
+    coffD, coordonnerZero = CoordonnerCalibrage(frame, distanceZone)
+
+    if coffD is None:
+        print("Calibrage impossible : 4 coins rouges non détectés")
+        return()
+
     while True:
         ret,frame = camera.camera.read()
+
         if camera.flagCaptureImage(ret):
             break
-        
+
         frame, detected_objects, position = detect_objects(frame)
+
+        if position != ():
+            coordonnerReel = CoordenéesAuRobo(coffD, coordonnerZero, position)
+
         cv2.imshow("AI Vision", frame)
         if detected_objects:
-            print("Detected objects:", detected_objects, position, width, height)
+            print("Detected objects:", detected_objects, coordonnerReel, width, height)
 
         if camera.quitterAffichage():
             break
-        
+
+ 
     camera.camera.release()
     cv2.destroyAllWindows()
 

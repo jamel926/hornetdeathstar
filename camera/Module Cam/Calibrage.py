@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 
-def Calibrage(image, D):  #Fonction de calibrage pour definir un nouveau répère au niveau des quatre coins rouges autour du carré utile #Elle prends l'image originale, la distance entre les coins (suposé. Carré)
+def CoordonnerCalibrage(image, D):  #Fonction de calibrage pour definir un nouveau répère au niveau des quatre coins rouges autour du carré utile #Elle prends l'image originale, la distance entre les coins (suposé. Carré)
 #Elle donne deux listes, la première avec les coef de proportion et la deuxième avec les coordenés d'origine
 
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV) #Bleu,Green,Red -> Hue, saturation, 
@@ -54,14 +54,13 @@ def Calibrage(image, D):  #Fonction de calibrage pour definir un nouveau répèr
             x_o = int(tl[0])
             y_o = int(tl[1])
 
-        else:
-            print("Erreur : Impossible de détecter clairement les 4 coins rouges.")
-
             return [float(D/dist_top), float(D/dist_right), float(D/dist_bottom), float(D/dist_left)],[float(x_o), float(y_o)]
 
+        else:
+             return(None, None)
 
 def CoordenéesAuRobo(coef, CoordDorigine, CoordPointIA): #Fonction pour calculer les coordenées à envoyer au robo. Elle prends la liste des coeficients, la listedes coordenées de l'origine (x_0, y_0) et la liste de coordenées du point decteté par l'IA 
-        return [(CoordPointIA[0]-CoordDorigine[0])*coef[0], (CoordPointIA[1]-CoordDorigine[1])*coef[1] ]
+        return [(CoordPointIA[0]-CoordDorigine[0])*coef[0], (CoordPointIA[1]-CoordDorigine[1])*coef[1]]
             
    # # 4. Enlever tout ce qui est à l'extérieur (recadrage par perspective)
    # width = max(int(dist_top), int(dist_bottom))
