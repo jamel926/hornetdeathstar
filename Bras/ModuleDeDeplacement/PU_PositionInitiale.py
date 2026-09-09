@@ -93,14 +93,14 @@ NOMS_ARTICULATIONS = ["J1", "J2", "J3", "J4", "J5", "J6"]
 """
 Pose de depart du bras, en degres.
 
-Valeurs relevees sur le demonstrateur.o
+Valeurs relevees sur le demonstrateur.
 
 Pour les relever a nouveau : placer le bras a la main
 dans la pose voulue (moteurs relaches via
 release_all_servos) puis lire mc.get_angles().
 """
 
-1ANGLES_POSITION_INITIALE = [
+ANGLES_POSITION_INITIALE = [
     0.0,      # J1 - rotation de la base
     50.0,     # J2 - epaule
     -145.0,   # J3 - coude
