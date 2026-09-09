@@ -99,8 +99,8 @@ Pour les relever a nouveau : placer le bras a la main
 dans la pose voulue (moteurs relaches via
 release_all_servos) puis lire mc.get_angles().
 """
-'''
-ANGLES_POSITION_INITIALE = [
+
+1ANGLES_POSITION_INITIALE = [
     0.0,      # J1 - rotation de la base
     50.0,     # J2 - epaule
     -145.0,   # J3 - coude
