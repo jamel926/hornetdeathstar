@@ -51,9 +51,24 @@ Il est fortement recommandé de faire tourner ce projet dans un environnement vi
 ├── camera/           # IA (YOLOv8, poids du modèle), Caméra (Stéréovision) et Reconnaissance
 ├── Detection_son/    # Analyse fréquentielle pour discriminer les abeilles des frelons
 ├── Environement/     # Fichiers YAML et archives ZIP pour l'environnement virtuel
-├── GUI_brouillon_vibecode.py # Interface graphique en cours de développement
+├── GUI_brouillon_vibecode.py # Interface QtPy de test, calibrage et acquisition
 └── README.md         # Documentation principale du projet
 ```
+
+### Prototype d'interface QtPy
+
+Installez les dépendances et lancez l'interface depuis la racine du projet :
+
+```powershell
+python -m pip install -r requirements.txt
+python GUI_brouillon_vibecode.py --camera-index 1
+```
+
+Les trois actions testent les connexions, effectuent le calibrage et lancent/arrêtent
+l'acquisition YOLO. Les résultats du calibrage sont ajoutés dans
+`logs/calibration_results.txt`. La case de journalisation ajoute les coordonnées dans
+`logs/detection_coordinates.txt`. Utilisez `--device 0` pour demander explicitement le
+premier GPU CUDA, ou `--help` pour afficher toutes les options.
 
 ## Utilisation
 
@@ -126,9 +141,24 @@ It is highly recommended to run this project in a Python virtual environment. Th
 ├── camera/           # AI (YOLOv8, model weights), Camera Module (Stereovision), and Object Recognition
 ├── Detection_son/    # Frequency analysis to discriminate bees from hornets
 ├── Environement/     # YAML files and ZIP archives for the virtual environment
-├── GUI_brouillon_vibecode.py # Graphical User Interface draft
+├── GUI_brouillon_vibecode.py # QtPy test, calibration, and acquisition interface
 └── README.md         # Main project documentation
 ```
+
+### QtPy GUI prototype
+
+Install the dependencies and launch the interface from the project root:
+
+```powershell
+python -m pip install -r requirements.txt
+python GUI_brouillon_vibecode.py --camera-index 1
+```
+
+The three actions test connections, perform calibration, and start/stop YOLO
+acquisition. Calibration results are appended to `logs/calibration_results.txt`.
+Enabling the logging checkbox appends coordinates to
+`logs/detection_coordinates.txt`. Use `--device 0` to explicitly request the first
+CUDA GPU, or `--help` to see every option.
 
 ## Usage
 
