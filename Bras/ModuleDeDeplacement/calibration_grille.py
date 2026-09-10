@@ -15,14 +15,21 @@ modele qui interpole entre ces points.
 
 Deroulement d'une seance :
 -------------------------
-Le bras part en position initiale, puis pour chaque point :
-la tete est RELACHEE, l'operateur l'oriente a la main
-jusqu'a ce que le spot tombe sur un noeud du quadrillage,
-et une touche valide la position.
+Le bras part en position initiale, puis pour chaque point
+l'operateur amene le spot sur un noeud du quadrillage avec
+les fleches du clavier, et valide par entree.
 
-Seuls les servos 4 et 5 sont relaches. J1 a J3 gardent
-leur couple : relacher les six ferait tomber le bras d'un
-coup sous son propre poids.
+Tout le deplacement passe par les moteurs, et chaque pas
+arrive du meme cote que l'approche du tir. La pose relevee
+est donc exactement celle que le bras retrouvera : il n'y a
+aucun ecart entre la position pointee et la position
+enregistree.
+
+Une touche permet de relacher la tete pour la placer
+grossierement a la main, ce qui evite des dizaines d'appuis
+pour traverser la zone. Seuls les servos 4 et 5 sont alors
+relaches : relacher les six ferait tomber le bras d'un coup
+sous son propre poids.
 
 Phase 1 : la base ne bouge pas
 ------------------------------
@@ -119,6 +126,21 @@ import time
 from datetime import datetime
 
 """
+Lecture des fleches du clavier. Ces trois modules sont
+dans la bibliotheque standard, mais absents de Windows :
+sans eux, le pointage retombe sur des commandes tapees.
+"""
+
+try:
+    import tty
+    import termios
+    import select
+    CLAVIER_DIRECT = True
+
+except ImportError:
+    CLAVIER_DIRECT = False
+
+"""
 Import optionnel de la pose de reference de l'equipe.
 
 PU_PositionInitiale n'ouvre pas le port serie a l'import,
@@ -193,6 +215,45 @@ VITESSE_TETE = 20          # int, 1 a 100 (impose par pymycobot)
 TIMEOUT_TETE = 10          # secondes
 TOLERANCE_TETE = 2.0       # degres
 PERIODE_SCRUTATION = 0.2   # secondes
+
+"""
+Fin de mouvement.
+
+TOLERANCE_TETE ne suffit pas a decider qu'un mouvement est
+termine : a 30 cm de hauteur, 2 degres valent deja 1 cm, et
+le bras est encore en train de bouger quand il passe sous ce
+seuil. Relever les angles a cet instant les fait correspondre
+a une position que le spot a deja quittee.
+
+On attend donc que les angles ne bougent plus reellement :
+plusieurs lectures consecutives identiques, is_moving() a
+l'appui quand le firmware le renseigne.
+"""
+SEUIL_STABILITE = 0.15     # degres entre deux lectures
+LECTURES_STABLES = 3       # lectures consecutives sans mouvement
+TIMEOUT_STABILITE = 4      # secondes
+
+"""
+Pas de deplacement au clavier. Un pas de 0,5 degre vaut
+environ 2,6 mm au sol a 30 cm : c'est la finesse utile pour
+poser le spot sur un noeud.
+"""
+PAS_JOG_DEFAUT = 1.0       # degres
+PAS_JOG_MIN = 0.1          # degres
+PAS_JOG_MAX = 10.0         # degres
+
+"""
+Depassement applique quand un pas de jog va dans le sens
+oppose au sens d'arrivee.
+
+Le jeu des reducteurs se place du cote du DERNIER mouvement.
+En depassant puis en revenant, toute position atteinte au
+clavier l'est en arrivant du meme cote qu'au tir, ou
+approcher() fait de meme. Sans cela, la position relevee ne
+serait pas celle que le bras retrouve quand il y revient
+tout seul.
+"""
+DEPASSEMENT_JOG = 3.0      # degres
 
 """
 Ecart tolere sur J1 a J3 avant de considerer que la base a
@@ -1046,6 +1107,7 @@ def bougerTete(mc, base, j4, j5, j6, vitesse=VITESSE_TETE, timeout=TIMEOUT_TETE)
 
     debut = time.time()
     mesure = None
+    proche = False
 
     while time.time() - debut < timeout:
 
@@ -1057,9 +1119,73 @@ def bougerTete(mc, base, j4, j5, j6, vitesse=VITESSE_TETE, timeout=TIMEOUT_TETE)
             continue
 
         if abs(mesure[3] - j4) <= TOLERANCE_TETE and abs(mesure[4] - j5) <= TOLERANCE_TETE:
-            return (True, mesure)
+            proche = True
+            break
 
-    return (False, mesure)
+    if not proche:
+        return (False, mesure)
+
+    # -----------------------------------------------------
+    # Fin reelle du mouvement
+    # -----------------------------------------------------
+
+    """
+    Passer sous la tolerance ne veut pas dire etre arrive :
+    le bras converge encore. On rend la main seulement quand
+    les angles ont cesse de bouger, sinon la pose relevee ne
+    correspond deja plus a la position du spot.
+    """
+
+    stable = attendreStabilisation(mc)
+
+    return (True, stable if stable is not None else mesure)
+
+
+def attendreStabilisation(mc, timeout=TIMEOUT_STABILITE):
+    """Attend que la tete ait reellement cesse de bouger et retourne la pose stabilisee."""
+
+    debut = time.time()
+
+    precedente = None
+    consecutives = 0
+
+    while time.time() - debut < timeout:
+
+        time.sleep(PERIODE_SCRUTATION)
+
+        mesure = lireAngles(mc)
+
+        if mesure is None:
+            continue
+
+        # Le firmware sait parfois repondre directement.
+        try:
+            en_mouvement = mc.is_moving()
+
+        except Exception:
+            en_mouvement = 0
+
+        if en_mouvement == 1:
+            consecutives = 0
+            precedente = mesure
+            continue
+
+        if precedente is not None:
+
+            bouge = max(abs(mesure[i] - precedente[i]) for i in (3, 4))
+
+            if bouge <= SEUIL_STABILITE:
+                consecutives += 1
+
+                if consecutives >= LECTURES_STABLES:
+                    return mesure
+
+            else:
+                consecutives = 0
+
+        precedente = mesure
+
+    return precedente
 
 
 def approcher(mc, base, j4, j5, j6):
@@ -1077,6 +1203,32 @@ def approcher(mc, base, j4, j5, j6):
     bougerTete(mc, base, j4_recul, j5_recul, j6)
 
     return bougerTete(mc, base, j4, j5, j6)
+
+
+def bougerTeteDuMemeCote(mc, base, courant_j4, courant_j5, cible_j4, cible_j5, j6):
+    """Deplace la tete en arrivant toujours du meme cote, et retourne (arrive, pose mesuree)."""
+
+    """
+    Un pas qui va vers les valeurs croissantes arrive deja du
+    bon cote : on l'envoie directement. Un pas qui redescend
+    depasse la cible puis remonte dessus.
+
+    C'est ce qui permet de relever la pose telle quelle, sans
+    reprise d'approche apres coup : la position pointee EST
+    celle que le bras retrouvera au tir.
+    """
+
+    pre_j4 = cible_j4 - DEPASSEMENT_JOG if cible_j4 < courant_j4 else cible_j4
+    pre_j5 = cible_j5 - DEPASSEMENT_JOG if cible_j5 < courant_j5 else cible_j5
+
+    if (pre_j4, pre_j5) != (cible_j4, cible_j5):
+
+        pre_j4 = max(J4_MIN, pre_j4)
+        pre_j5 = max(J5_MIN, pre_j5)
+
+        bougerTete(mc, base, pre_j4, pre_j5, j6)
+
+    return bougerTete(mc, base, cible_j4, cible_j5, j6)
 
 
 def signalerCouleur(mc, couleur):
@@ -1227,6 +1379,57 @@ def lireTexte(message, defaut=""):
     return reponse if reponse else defaut
 
 
+def lireTouche():
+    """Lit une touche au vol, fleches comprises, et retourne son nom."""
+
+    """
+    Le terminal est passe en mode caractere le temps de la
+    lecture : sans cela il faudrait valider chaque appui par
+    entree. Les fleches n'envoient pas un caractere mais une
+    sequence d'echappement de trois octets, d'ou la relecture
+    conditionnelle.
+
+    En l'absence de terminal -- redirection, tuyau, tests --
+    on retombe sur une ligne tapee.
+    """
+
+    if not CLAVIER_DIRECT or not sys.stdin.isatty():
+        return lireTexte("  > ").lower()
+
+    descripteur = sys.stdin.fileno()
+    ancien_mode = termios.tcgetattr(descripteur)
+
+    try:
+        tty.setcbreak(descripteur)
+
+        touche = sys.stdin.read(1)
+
+        if touche == "\x1b":
+
+            # Sequence de fleche : deux octets suivent, mais
+            # la touche echap seule n'en envoie aucun.
+            if select.select([sys.stdin], [], [], 0.05)[0]:
+
+                suite = sys.stdin.read(2)
+
+                return {
+                    "[A": "haut",
+                    "[B": "bas",
+                    "[C": "droite",
+                    "[D": "gauche",
+                }.get(suite, "echap")
+
+            return "echap"
+
+    finally:
+        termios.tcsetattr(descripteur, termios.TCSADRAIN, ancien_mode)
+
+    if touche in ("\r", "\n"):
+        return "entree"
+
+    return touche.lower()
+
+
 def lireImpact():
     """Demande les coordonnees du noeud vise en carreaux et retourne (u, v) en centimetres, ou None."""
 
@@ -1258,54 +1461,155 @@ def lireImpact():
         return (u, v)
 
 
-def pointageManuel(mc):
-    """Relache la tete, attend que l'operateur l'oriente a la main, et retourne (issue, pose)."""
+def afficherAideClavier(pas):
+    """Affiche les commandes du pointage au clavier."""
+
+    print("  fleches gauche/droite : J4 -%.2f / +%.2f deg" % (pas, pas))
+    print("  fleches haut/bas      : J5 +%.2f / -%.2f deg" % (pas, pas))
+    print("  + / -  : pas plus grand / plus petit      m : bouger la tete a la main")
+    print("  entree : valider ce point      s : sauter      f : terminer")
+
+
+def pointageMainLibre(mc, base, j4, j5, j6):
+    """Relache la tete pour un placement grossier a la main, et retourne la pose apres reprise."""
 
     """
-    La tete est relachee puis reverrouillee A CHAQUE
-    point. Laisser les servos libres entre deux points
-    ferait perdre le pointage des qu'on lache le bras.
+    Traverser 75 cm au clavier prendrait des dizaines
+    d'appuis. La main sert a degrossir ; le clavier, a poser
+    le spot exactement sur le noeud.
     """
 
     print("  TENIR LA TETE : elle va devenir molle.")
 
     if not lireTexte("  Prete a etre relachee ? [O/n] ", "o").lower().startswith("o"):
-        return ("saut", None)
+        return (j4, j5)
 
     if not relacherTete(mc):
-        return ("saut", None)
+        return (j4, j5)
 
-    print("  Tete libre. Orienter le spot sur un noeud du quadrillage.")
-    print("  [Entree] valider    s : sauter ce point    f : terminer")
+    print("  Tete libre. La placer approximativement, puis entree.")
+    lireTexte("  > ")
 
-    reponse = lireTexte("  > ").lower()
+    pose = lireAngles(mc)
+    verrouillerTete(mc, pose)
+
+    if pose is None:
+        return (j4, j5)
 
     # -----------------------------------------------------
-    # Releve puis reverrouillage
+    # Reprise par les moteurs
     # -----------------------------------------------------
 
     """
-    Les angles sont lus AVANT de rendre le couple : c'est
-    la pose reellement tenue a la main qui nous interesse.
-    Le verrouillage suit immediatement, quelle que soit
-    l'issue, pour ne jamais laisser la tete molle.
+    La pose obtenue a la main n'est pas celle ou le bras
+    revient tout seul : l'encodeur est cote moteur, il ne voit
+    pas le jeu du reducteur. On refait donc l'arrivee par les
+    moteurs tout de suite. Le spot bouge un peu ici, et c'est
+    normal : l'affinage au clavier suit.
     """
+
+    print("  Reprise par les moteurs, le spot va se decaler un peu...")
+
+    arrive, mesure = approcher(mc, base, pose[3], pose[4], j6)
+
+    if mesure is None:
+        return (j4, j5)
+
+    return (mesure[3], mesure[4])
+
+
+def pointageAuClavier(mc, base, j4, j5, j6):
+    """Deplace la tete au clavier jusqu'au noeud vise, et retourne (issue, pose mesuree)."""
+
+    """
+    Tout le deplacement passe par les moteurs, et chaque pas
+    arrive du meme cote. La pose relevee a la validation est
+    donc exactement celle que le bras retrouvera au tir : il
+    n'y a plus rien a corriger apres coup.
+    """
+
+    pas = PAS_JOG_DEFAUT
+
+    afficherAideClavier(pas)
 
     pose = lireAngles(mc)
 
-    verrouillerTete(mc, pose)
+    while True:
 
-    if reponse.startswith("f"):
-        return ("fin", pose)
+        print("  J4 = %+7.2f   J5 = %+7.2f   (pas %.2f)" % (j4, j5, pas))
 
-    if reponse.startswith("s"):
-        return ("saut", pose)
+        touche = lireTouche()
 
-    if pose is None:
-        print("  Lecture des angles impossible, point abandonne.")
-        return ("saut", None)
+        # -------------------------------------------------
+        # Sortie
+        # -------------------------------------------------
 
-    return ("ok", pose)
+        if touche in ("entree", "o", "ok", ""):
+
+            pose = lireAngles(mc)
+
+            if pose is None:
+                print("  Lecture des angles impossible.")
+                continue
+
+            return ("ok", pose)
+
+        if touche in ("s", "saut"):
+            return ("saut", None)
+
+        if touche in ("f", "fin", "echap"):
+            return ("fin", None)
+
+        if touche in ("?", "h", "aide"):
+            afficherAideClavier(pas)
+            continue
+
+        # -------------------------------------------------
+        # Reglages
+        # -------------------------------------------------
+
+        if touche == "+":
+            pas = min(PAS_JOG_MAX, pas * 2.0)
+            continue
+
+        if touche == "-":
+            pas = max(PAS_JOG_MIN, pas / 2.0)
+            continue
+
+        if touche == "m":
+            j4, j5 = pointageMainLibre(mc, base, j4, j5, j6)
+            afficherAideClavier(pas)
+            continue
+
+        # -------------------------------------------------
+        # Deplacement
+        # -------------------------------------------------
+
+        cible_j4 = j4
+        cible_j5 = j5
+
+        if touche == "gauche":
+            cible_j4 = j4 - pas
+        elif touche == "droite":
+            cible_j4 = j4 + pas
+        elif touche == "haut":
+            cible_j5 = j5 + pas
+        elif touche == "bas":
+            cible_j5 = j5 - pas
+        else:
+            print("  Touche inconnue. Taper ? pour l'aide.")
+            continue
+
+        arrive, mesure = bougerTeteDuMemeCote(mc, base, j4, j5, cible_j4, cible_j5, j6)
+
+        if mesure is not None:
+            # On repart des angles REELS : sinon l'ecart avec
+            # la consigne s'accumule sans que rien ne le dise.
+            j4 = mesure[3]
+            j5 = mesure[4]
+
+        else:
+            print("  ATTENTION : la tete n'a pas suivi la consigne.")
 
 
 # =========================================================
@@ -1428,15 +1732,16 @@ def afficherProtocole():
     print("Le laser de puissance doit etre DEBRANCHE, pas seulement eteint.")
     print()
     print("Deroulement de chaque point :")
-    print("  1. la tete est relachee -- LA TENIR avant de valider ;")
-    print("  2. vous l'orientez a la main sur un noeud du quadrillage ;")
-    print("  3. [Entree] releve les angles et reverrouille la tete ;")
-    print("  4. le robot refait l'approche par les moteurs, comme au tir :")
-    print("     le spot peut se decaler un peu, c'est normal ;")
-    print("  5. vous lisez ou le spot est tombe APRES ce mouvement.")
+    print("  1. les fleches amenent le spot sur un noeud du quadrillage ;")
+    print("  2. [Entree] releve les angles et enregistre le point.")
     print()
-    print("Seuls les servos 4 et 5 sont relaches. L'epaule et le coude")
-    print("gardent leur couple : le bras ne s'effondre pas.")
+    print("Le spot ne bouge plus entre le pointage et le releve : chaque")
+    print("pas arrive du meme cote que l'approche du tir, la position")
+    print("pointee est donc celle que le bras retrouvera.")
+    print()
+    print("La touche m relache la tete pour la placer a la main quand il")
+    print("faut traverser la zone -- LA TENIR avant de valider. Seuls les")
+    print("servos 4 et 5 sont relaches, le bras ne s'effondre pas.")
     print()
     print("Repartition des points :")
     print("  - une grille reguliere, environ 5 x 4, usage 'ajustement' ;")
@@ -1454,6 +1759,11 @@ def afficherProtocole():
 def seanceDeReleve(mc, base, j6, serie, usage):
     """Deroule le pointage des points un par un et retourne le nombre de points enregistres."""
 
+    depart = lireAngles(mc)
+
+    j4 = depart[3] if depart else 0.0
+    j5 = depart[4] if depart else 0.0
+
     index = 0
     enregistres = 0
 
@@ -1464,12 +1774,9 @@ def seanceDeReleve(mc, base, j6, serie, usage):
         print()
         print("-----------------------------------------")
         print("Point", index, "  (serie '%s', usage '%s')" % (serie, usage))
+        print("Amener le spot sur un noeud du quadrillage.")
 
-        # -------------------------------------------------
-        # Pointage a la main
-        # -------------------------------------------------
-
-        issue, pose = pointageManuel(mc)
+        issue, pose = pointageAuClavier(mc, base, j4, j5, j6)
 
         if issue == "fin":
             break
@@ -1486,11 +1793,11 @@ def seanceDeReleve(mc, base, j6, serie, usage):
         # -------------------------------------------------
 
         """
-        J1 a J3 gardent leur couple, mais une main appuyee
-        un peu fort les deplace quand meme. Si la base
-        bouge en cours de seance, les points releves avant
-        et apres ne decrivent plus la meme geometrie : tout
-        le modele est fausse, sans que rien ne le signale.
+        J1 a J3 ne sont jamais commandes, mais le mode main
+        les deplace si on appuie un peu fort. Si la base bouge
+        en cours de seance, les points releves avant et apres
+        ne decrivent plus la meme geometrie, et rien dans les
+        residus ne le signalerait.
         """
 
         ecarts_base = [abs(pose[i] - base[i]) for i in range(3)]
@@ -1505,41 +1812,15 @@ def seanceDeReleve(mc, base, j6, serie, usage):
                 continue
 
         # -------------------------------------------------
-        # Reprise d'approche
-        # -------------------------------------------------
-
-        """
-        La tete est ramenee sur ces memes angles par les
-        moteurs, en arrivant du meme cote qu'au tir. Le jeu
-        des reducteurs se replace alors comme il le fera en
-        service : le spot peut se decaler un peu, et c'est
-        precisement cette position-la qu'il faut relever.
-
-        Sans cette etape, la calibration decrirait une pose
-        obtenue a la main, que le bras ne reproduit pas
-        quand il y revient tout seul.
-        """
-
-        print("  Reprise d'approche...")
-
-        arrive, mesure = approcher(mc, base, j4, j5, j6)
-
-        if mesure is None:
-            print("  Lecture impossible, point abandonne.")
-            index -= 1
-            continue
-
-        if not arrive:
-            print("  ATTENTION : la tete n'est pas revenue a la consigne.")
-
-        j4 = mesure[3]
-        j5 = mesure[4]
-
-        # -------------------------------------------------
         # Releve de l'impact
         # -------------------------------------------------
 
-        print("  Lire la position du spot MAINTENANT : il a pu se decaler.")
+        """
+        Le spot est reste exactement ou il a ete pose : la
+        derniere position atteinte l'a ete par les moteurs, en
+        arrivant du bon cote. Rien ne bouge entre le pointage
+        et le releve.
+        """
 
         impact = lireImpact()
 
@@ -1549,7 +1830,7 @@ def seanceDeReleve(mc, base, j6, serie, usage):
 
         commentaire = lireTexte("  Commentaire (facultatif) > ")
 
-        if enregistrerPoint(serie, usage, index, (j4, j5), mesure, impact, commentaire):
+        if enregistrerPoint(serie, usage, index, (j4, j5), pose, impact, commentaire):
             enregistres += 1
             print("  Point enregistre : J4 = %+.2f  J5 = %+.2f  ->  u = %.1f  v = %.1f"
                   % (j4, j5, impact[0], impact[1]))
