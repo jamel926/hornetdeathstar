@@ -103,7 +103,7 @@ release_all_servos) puis lire mc.get_angles().
 """
 
 ANGLES_POSITION_INITIALE = [
-    160.0,      # J1 - rotation de la base
+    10.0,      # J1 - rotation de la base
     50.0,     # J2 - epaule
     -145.0,   # J3 - coude
     40.0,     # J4 - poignet
