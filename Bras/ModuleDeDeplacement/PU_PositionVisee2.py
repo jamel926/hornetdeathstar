@@ -176,7 +176,7 @@ def aller_en_position_visee(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEO
     for i in range(6):
         print("  ", NOMS_ARTICULATIONS[i], "=", angles[i], "degres")
 
-     try:
+    try:
 
         # -------------------------------------------------
         # Arret d'un eventuel mouvement en cours
