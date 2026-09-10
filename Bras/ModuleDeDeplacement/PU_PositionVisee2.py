@@ -50,7 +50,13 @@ from PU_PositionInitiale import (
     ecartMaximal,
     TOLERANCE_ANGLE,
     PORT,
-    BAUDRATE
+    BAUDRATE,
+    statuts_moteurs,
+    detection_problemes, 
+    Explanation_problemes, 
+    Arret_urgence, 
+    blocage_vitesse_moteur, 
+    ReculerPositionPrec, 
 )
 
 def Mise_en_Position_Initiale(vitesse):
@@ -170,7 +176,7 @@ def aller_en_position_visee(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEO
     for i in range(6):
         print("  ", NOMS_ARTICULATIONS[i], "=", angles[i], "degres")
 
-    try:
+     try:
 
         # -------------------------------------------------
         # Arret d'un eventuel mouvement en cours
@@ -181,7 +187,7 @@ def aller_en_position_visee(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEO
         mouvement deja lance : la trajectoire resultante
         serait imprevisible.
         """
-
+       
         if mc.is_moving() == 1:
             print("Un mouvement est en cours, arret avant initialisation.")
             mc.stop()
@@ -192,9 +198,37 @@ def aller_en_position_visee(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEO
         # -------------------------------------------------
 
         print("Deplacement en cours (vitesse", int(vitesse), ")...")
-
+        print(f"début du mvt")
         # La vitesse doit imperativement etre un entier
+        
         mc.send_angles(angles, int(vitesse))
+        debut = time.time()
+        # Attendre que le mouvement démarre (QUE IS MOVING PASSE À 1)
+        while mc.is_moving() != 1:
+            time.sleep(0.05)
+
+        print("Mouvement détecté")
+        derniers_angles = lireAngles(mc)
+
+
+       # Surveillance pendant le mouvement
+        while mc.is_moving() == 1:
+           a = statuts_moteurs(mc)
+           a[2]=0 # pour ignoer J3 en panne pour le robot 1
+
+           if detection_problemes(a):
+               Explanation_problemes(a)
+               print("Vous avez merdé les loustics")
+               Arret_urgence(mc)
+               ReculerPositionPrec(mc, derniers_angles, vitesse)
+               return False
+
+           time.sleep(0.1)
+           if time.time() - debut > 0.3:
+               if blocage_vitesse_moteur(mc, angle_cible=angles):
+                   Arret_urgence(mc)
+                   ReculerPositionPrec(mc, derniers_angles, vitesse)
+                   return False
 
     except Exception as e:
         print("Erreur pendant le deplacement :", e)
