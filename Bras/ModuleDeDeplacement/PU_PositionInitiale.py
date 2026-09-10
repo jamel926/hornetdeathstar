@@ -58,7 +58,7 @@ BAUDRATE = 1000000
 # Vitesse volontairement faible : la mise en position
 # initiale part d'une pose inconnue, le bras peut avoir
 # un long chemin a parcourir.
-VITESSE_INIT = 20        # int, 1 a 100 (impose par pymycobot)
+VITESSE_INIT = 100        # int, 1 a 100 (impose par pymycobot)
 
 # Duree maximale accordee au bras pour atteindre la pose.
 TIMEOUT_INIT = 15        # secondes
@@ -424,16 +424,6 @@ def main():
         print("Le bras est deja en position initiale.")
         return 0
 
-    # -----------------------------------------------------
-    # Confirmation de l'operateur
-    # -----------------------------------------------------
-
-    print()
-    confirmation = input("Lancer la mise en position initiale ? (o/n) : ")
-
-    if confirmation.lower() != "o":
-        print("Mise en position initiale annulee par l'operateur.")
-        return 1
 
     # -----------------------------------------------------
     # Mouvement

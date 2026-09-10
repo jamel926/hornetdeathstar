@@ -73,7 +73,7 @@ from PU_Visee import lireCoords, NOMS_COORDONNEES, UNITES_COORDONNEES
 # envoyee etant la pose deja atteinte, le bras ne parcourt
 # aucune distance : cette vitesse ne sert qu'a reprendre le
 # couple sans a-coup.
-VITESSE_VERROUILLAGE = 10   # int, 1 a 100 (impose par pymycobot)
+VITESSE_VERROUILLAGE = 100   # int, 1 a 100 (impose par pymycobot)
 
 # Periode de rafraichissement du suivi en direct.
 PERIODE_SUIVI = 0.5         # secondes

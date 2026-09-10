@@ -89,16 +89,6 @@ def Mise_en_Position_Initiale(vitesse):
         print("Le bras est deja en position initiale.")
         return 0
 
-    # -----------------------------------------------------
-    # Confirmation de l'operateur
-    # -----------------------------------------------------
-
-    print()
-    confirmation = input("Lancer la mise en position initiale ? (o/n) : ")
-
-    if confirmation.lower() != "o":
-        print("Mise en position initiale annulee par l'operateur.")
-        return 1
 
     # -----------------------------------------------------
     # Mouvement
@@ -204,7 +194,7 @@ def aller_en_position_visee(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEO
         print("Deplacement en cours (vitesse", int(vitesse), ")...")
 
         # La vitesse doit imperativement etre un entier
-        mc.sync_send_angles(angles, int(vitesse), timeout)
+        mc.send_angles(angles, int(vitesse))
 
     except Exception as e:
         print("Erreur pendant le deplacement :", e)
@@ -246,12 +236,12 @@ def main():
     """Sequence complete de mise en position initiale, avec confirmation de l'operateur."""
     Mise_en_Position_Initiale(50)
 
-    VAL_J1 = float(input("Valeur de J1 voulue : "))
-    VAL_J2 = float(input("Valeur de J2 voulue : "))
-    VAL_J3 = float(input("Valeur de J3 voulue : "))
+    VAL_J1 = 0.0 #float(input("Valeur de J1 voulue : "))
+    VAL_J2 = 50.0 #float(input("Valeur de J2 voulue : "))
+    VAL_J3 = -145.0 #float(input("Valeur de J3 voulue : "))
     VAL_J4 = float(input("Valeur de J4 voulue : "))
     VAL_J5 = float(input("Valeur de J5 voulue : "))
-    VAL_J6 = float(input("Valeur de J6 voulue : "))
+    VAL_J6 = 0.0 #float(input("Valeur de J6 voulue : "))
 
     ANGLES_POSITION_VISEES= [
     VAL_J1,      # J1 - rotation de la base
@@ -266,13 +256,6 @@ def main():
     print()
     print("Position actuelle :", lireAngles(mc))
     print("Position visee    :", ANGLES_POSITION_VISEES)
-
-    print()
-    confirmation = input("Lancer la mise en position visée ? (o/n) : ")
-
-    if confirmation.lower() != "o":
-        print("Mise en position visee annulee par l'operateur.")
-        return 1
 
     # -----------------------------------------------------
     # Mouvement

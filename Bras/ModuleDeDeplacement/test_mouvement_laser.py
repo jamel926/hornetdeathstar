@@ -16,7 +16,7 @@ from PU_PositionInitiale import (
     PORT,
     BAUDRATE
 )
-VITESSE_INIT=50
+VITESSE_INIT=100
 
 from PU_PositionVisee2 import (
     Verification_Angle_SECU,
@@ -142,7 +142,7 @@ def Mise_en_Position_Initiale(vitesse=VITESSE_INIT, utilisateur = bool):
         print("Deplacement en cours (vitesse", int(vitesse), ")...")
 
         # La vitesse doit imperativement etre un entier
-        mc.sync_send_angles(angles, int(vitesse), timeout)
+        mc.send_angles(angles, int(vitesse), timeout)
 
     except Exception as e:
         print("Erreur pendant le deplacement :", e)
@@ -191,7 +191,7 @@ def main():
     time.sleep(1)
 
 
-    Mise_en_Position_Initiale(50, True)
+    Mise_en_Position_Initiale(100, True)
     time.sleep(2)
 
     VAL_J4 = float(input("Valeur de J4 voulue : "))
@@ -240,7 +240,7 @@ def main():
     # Remise en position initiale
     # -----------------------------------------------------
 
-    Mise_en_Position_Initiale(50, False)
+    Mise_en_Position_Initiale(100, False)
 
     return 1
     
