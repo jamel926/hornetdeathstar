@@ -74,9 +74,9 @@ from calibration_grille import (
 FICHIER_VALIDATION = os.path.join(DOSSIER_RESULTATS, "validation_pointage.csv")
 
 ENTETE_VALIDATION = [
-    "horodatage", "u_demande_cm", "v_demande_cm",
-    "J4", "J5", "u_reel_cm", "v_reel_cm",
-    "ecart_cm", "commentaire",
+    "horodatage", "u_demande_carreaux", "v_demande_carreaux",
+    "J4", "J5", "u_reel_carreaux", "v_reel_carreaux",
+    "ecart_carreaux",
 ]
 
 
@@ -122,7 +122,7 @@ def verifierBase(mc, modele, tolerance=TOLERANCE_BASE):
 # 4. ENREGISTREMENT DES TIRS
 # =========================================================
 
-def enregistrerTir(demande, angles, reel, commentaire):
+def enregistrerTir(demande, angles, reel):
     """Ajoute une ligne au fichier de validation et retourne True si l'ecriture a reussi."""
 
     if reel is None:
@@ -150,7 +150,7 @@ def enregistrerTir(demande, angles, reel, commentaire):
                 datetime.now().isoformat(timespec="seconds"),
                 round(demande[0], 3), round(demande[1], 3),
                 round(angles[0], 3), round(angles[1], 3),
-                u_reel, v_reel, ecart, commentaire,
+                u_reel, v_reel, ecart,
             ])
 
         return True
@@ -165,11 +165,17 @@ def enregistrerTir(demande, angles, reel, commentaire):
 # =========================================================
 
 def lireCible():
-    """Lit le point a viser et retourne (u, v) en centimetres, ou None pour terminer."""
+    """Lit le point a viser en carreaux et le retourne, ou None pour terminer."""
+
+    """
+    Tout se compte en carreaux, comme pendant la
+    calibration. Accepter deux unites dans une meme chaine
+    de mesure finit par produire un facteur d'echelle que
+    rien ne signale -- ici il vaudrait 3.
+    """
 
     print()
-    print("Point a viser : deux nombres en CENTIMETRES (ex : 12 -6),")
-    print("ou prefixes de c pour des CARREAUX (ex : c 4 -2).")
+    print("Point a viser : deux nombres en CARREAUX (ex : 4 -2).")
     print("Taper fin pour terminer.")
 
     while True:
@@ -181,27 +187,21 @@ def lireCible():
 
         morceaux = reponse.replace(",", " ").split()
 
-        facteur = 1.0
-
-        if morceaux and morceaux[0].lower() == "c":
-            facteur = COTE_CARREAU
-            morceaux = morceaux[1:]
-
         if len(morceaux) != 2:
             print("  Il faut deux nombres separes par un espace.")
             continue
 
         try:
-            return (float(morceaux[0]) * facteur, float(morceaux[1]) * facteur)
+            return (float(morceaux[0]), float(morceaux[1]))
 
         except ValueError:
             print("  Saisie illisible.")
 
 
 def lireImpactReel(demande):
-    """Demande ou le spot est reellement tombe et retourne (u, v) en centimetres, ou None."""
+    """Demande ou le spot est reellement tombe, en carreaux, et le retourne ou None."""
 
-    print("  Ou le spot est-il tombe ? deux nombres en CARREAUX,")
+    print("  Ou le spot est-il tombe ? deux nombres en carreaux,")
     print("  ou Entree si le releve n'est pas fait.")
 
     reponse = lireTexte("  impact reel > ")
@@ -216,7 +216,7 @@ def lireImpactReel(demande):
         return None
 
     try:
-        reel = (float(morceaux[0]) * COTE_CARREAU, float(morceaux[1]) * COTE_CARREAU)
+        reel = (float(morceaux[0]), float(morceaux[1]))
 
     except ValueError:
         print("  Saisie ignoree.")
@@ -224,7 +224,7 @@ def lireImpactReel(demande):
 
     ecart = ((reel[0] - demande[0]) ** 2 + (reel[1] - demande[1]) ** 2) ** 0.5
 
-    print("  Ecart de pointage : %.2f cm" % ecart)
+    print("  Ecart de pointage : %.2f carreaux (%.1f cm)" % (ecart, ecart * COTE_CARREAU))
 
     return reel
 
@@ -235,7 +235,7 @@ def afficherRefus(modele, u, v):
     if not dansEnveloppe(modele, u, v, MARGE_ENVELOPPE):
         e = modele["enveloppe"]
         print("  REFUS : point hors de la zone calibree.")
-        print("  Zone relevee : u de %.1f a %.1f cm, v de %.1f a %.1f cm (marge %.1f cm)."
+        print("  Zone relevee : u de %.1f a %.1f carreaux, v de %.1f a %.1f carreaux (marge %.1f carreaux)."
               % (e["u_min"], e["u_max"], e["v_min"], e["v_max"], MARGE_ENVELOPPE))
         print("  Le modele n'extrapole pas : il faut etendre la calibration.")
         return
@@ -267,13 +267,13 @@ def main():
 
     residus = modele.get("residus")
     if residus:
-        print("Erreur annoncee a l'ajustement : rms %.2f cm, max %.2f cm"
-              % (residus["rms_cm"], residus["max_cm"]))
+        print("Erreur annoncee a l'ajustement : rms %.2f carreaux, max %.2f carreaux"
+              % (residus["rms_carreaux"], residus["max_carreaux"]))
 
     residus_validation = modele.get("residus_validation")
     if residus_validation:
-        print("Erreur en validation croisee   : rms %.2f cm, max %.2f cm"
-              % (residus_validation["rms_cm"], residus_validation["max_cm"]))
+        print("Erreur en validation croisee   : rms %.2f carreaux, max %.2f carreaux"
+              % (residus_validation["rms_carreaux"], residus_validation["max_carreaux"]))
     else:
         print("Pas de validation croisee dans ce modele : l'erreur reelle n'est pas verifiee.")
 
@@ -338,13 +338,12 @@ def main():
             if prediction is not None:
                 derive = ((prediction[0] - u) ** 2 + (prediction[1] - v) ** 2) ** 0.5
                 if derive > 0.1:
-                    print("  Angles atteints : J4 = %+.2f  J5 = %+.2f  -> %.2f cm de derive mecanique"
+                    print("  Angles atteints : J4 = %+.2f  J5 = %+.2f  -> %.2f carreaux de derive mecanique"
                           % (mesure[3], mesure[4], derive))
 
             reel = lireImpactReel(demande)
-            commentaire = lireTexte("  Commentaire (facultatif) > ")
 
-            enregistrerTir(demande, (mesure[3], mesure[4]), reel, commentaire)
+            enregistrerTir(demande, (mesure[3], mesure[4]), reel)
 
     finally:
 
