@@ -103,7 +103,7 @@ release_all_servos) puis lire mc.get_angles().
 """
 
 ANGLES_POSITION_INITIALE = [
-    0.0,      # J1 - rotation de la base
+    160.0,      # J1 - rotation de la base
     50.0,     # J2 - epaule
     -145.0,   # J3 - coude
     40.0,     # J4 - poignet
@@ -300,6 +300,74 @@ def estEnPositionInitiale(mc, angles=None, tolerance=TOLERANCE_ANGLE):
 
 
 # =========================================================
+# SECURITE
+# =========================================================
+
+
+def statuts_moteurs(mc):
+   ### Recupère la liste de statuts des moteurs : [0,0,0,0,0,0] : 0 si OK, ou valeur  si pb
+   a = mc.get_servo_status()
+   return(a)
+
+
+def detection_problemes(a):
+   ### Test la liste de statuts pour savoir si il y a un problème
+   if a == [0,0,0,0,0,0]:
+       res = False
+       print("Aucun problème de statuts des moteurs")
+   else :
+       res = True
+       print("Problème de statuts détecté")
+   return(res)
+
+
+def Statuts(j):
+   ### Exploite les valeurs des problèmes de statuts pour déterminer leur type
+   res= ["voltage", "sensor", "temperature", "current", "angle", "overload"]
+   return res[j]
+
+
+def Explanation_problemes(a):
+   ### Affichage des problèmes de statuts
+   for i in range(0,5) :
+       if a[i] !=0 :
+           print("Problème de statuts : J",i+1)
+           v = a[i][0]
+           print(Statuts(v),"problème")
+
+def Arret_urgence(mc):
+    print("======ARRET D'URGENCE======")
+    mc.stop()
+
+
+
+def blocage_vitesse_moteur(mc, angle_cible): 
+    speed = mc.get_servo_speeds()
+    angle_actuel = lireAngles(mc)
+    ecart_minimal = 3
+    print(f"vitesse  ={speed}\n angle = {angle_actuel}")
+    if speed is None: 
+        return False
+    for i in range(6):
+        if i !=2:  
+            ecart = abs(angle_actuel[i]-angle_cible[i])
+            if ecart > ecart_minimal and abs(speed[i])<150: 
+                print(f"Blocage sur le moteur J{i+1}")
+                return True
+    return False 
+
+
+def ReculerPositionPrec(mc, angles_prec, vitesse): 
+    if angles_prec is None: 
+        print(f"pas de postion précédente connue, le bras reste à l'arrêt")
+        return
+    print(f"retour à la position précédente, {angles_prec}")
+    mc.send_angles(angles_prec, int(vitesse))
+
+
+
+
+# =========================================================
 # 10. MISE EN POSITION INITIALE
 # =========================================================
 
@@ -335,7 +403,7 @@ def allerPositionInitiale(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEOUT
         mouvement deja lance : la trajectoire resultante
         serait imprevisible.
         """
-
+       
         if mc.is_moving() == 1:
             print("Un mouvement est en cours, arret avant initialisation.")
             mc.stop()
@@ -346,9 +414,37 @@ def allerPositionInitiale(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEOUT
         # -------------------------------------------------
 
         print("Deplacement en cours (vitesse", int(vitesse), ")...")
-
+        print(f"début du mvt")
         # La vitesse doit imperativement etre un entier
-        mc.sync_send_angles(angles, int(vitesse), timeout)
+        
+        mc.send_angles(angles, int(vitesse))
+        debut = time.time()
+        # Attendre que le mouvement démarre (QUE IS MOVING PASSE À 1)
+        while mc.is_moving() != 1:
+            time.sleep(0.05)
+
+        print("Mouvement détecté")
+        derniers_angles = lireAngles(mc)
+
+
+       # Surveillance pendant le mouvement
+        while mc.is_moving() == 1:
+           a = statuts_moteurs(mc)
+           a[2]=0 # pour ignoer J3 en panne pour le robot 1
+
+           if detection_problemes(a):
+               Explanation_problemes(a)
+               print("Vous avez merdé les loustics")
+               Arret_urgence(mc)
+               ReculerPositionPrec(mc, derniers_angles, vitesse)
+               return False
+
+           time.sleep(0.1)
+           if time.time() - debut > 0.3:
+               if blocage_vitesse_moteur(mc, angle_cible=angles):
+                   Arret_urgence(mc)
+                   ReculerPositionPrec(mc, derniers_angles, vitesse)
+                   return False
 
     except Exception as e:
         print("Erreur pendant le deplacement :", e)

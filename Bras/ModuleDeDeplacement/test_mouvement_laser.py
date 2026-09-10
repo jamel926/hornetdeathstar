@@ -96,9 +96,10 @@ def Mise_en_Position_Initiale(vitesse=VITESSE_INIT, utilisateur = bool):
 
     print("Echec de la mise en position initiale.")
     print("Les moteurs restent alimentes, le bras n'a pas ete relache.")
-    return
 
-    """Amene le bras dans la position initiale et confirme qu'il l'a bien atteinte."""
+    """
+    Amene le bras dans la position initiale et confirme qu'il l'a bien atteinte.
+    """
 
     if angles is None:
         angles = ANGLES_POSITION_INITIALE
