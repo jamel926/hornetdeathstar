@@ -13,6 +13,17 @@ On pointe une vingtaine de noeuds de la grille a la main,
 on releve les angles moteur a chaque fois, et on ajuste un
 modele qui interpole entre ces points.
 
+Deroulement d'une seance :
+-------------------------
+Le bras part en position initiale, puis pour chaque point :
+la tete est RELACHEE, l'operateur l'oriente a la main
+jusqu'a ce que le spot tombe sur un noeud du quadrillage,
+et une touche valide la position.
+
+Seuls les servos 4 et 5 sont relaches. J1 a J3 gardent
+leur couple : relacher les six ferait tomber le bras d'un
+coup sous son propre poids.
+
 Phase 1 : la base ne bouge pas
 ------------------------------
 J1, J2 et J3 sont relus au demarrage et renvoyes tels
@@ -88,6 +99,10 @@ ATTENTION :
 Toute la calibration se fait au POINTEUR ROUGE CLASSE 2.
 Le laser de puissance reste DEBRANCHE, pas seulement
 eteint.
+
+TENIR LA TETE avant chaque relachement. Sans couple, elle
+retombe sous son propre poids. Une main dessus avant de
+valider, pas apres.
 """
 
 
@@ -102,6 +117,22 @@ import json
 import math
 import time
 from datetime import datetime
+
+"""
+Import optionnel de la pose de reference de l'equipe.
+
+PU_PositionInitiale n'ouvre pas le port serie a l'import,
+cet appel est donc sans effet de bord. S'il venait a
+manquer, le script continue avec sa propre copie de la
+pose : il ne doit dependre d'aucun autre module pour
+fonctionner.
+"""
+
+try:
+    from PU_PositionInitiale import ANGLES_POSITION_INITIALE
+
+except Exception:
+    ANGLES_POSITION_INITIALE = None
 
 
 # =========================================================
@@ -130,12 +161,43 @@ BROCHE_LASER = 33
 NIVEAU_ALLUME = 0
 NIVEAU_ETEINT = 1
 
+"""
+Servos a relacher pour orienter la tete a la main.
+
+Numerotation pymycobot : 1 a 6 pour J1 a J6. On ne
+relache QUE ces deux la. release_all_servos() couperait
+aussi l'epaule et le coude, et le bras s'effondrerait.
+"""
+SERVOS_TETE = [4, 5]       # J4 et J5
+
+"""
+Pose de depart. La valeur de reference est celle de
+PU_PositionInitiale, importee plus haut quand ce module
+est disponible : c'est la source de verite de l'equipe.
+La copie locale ne sert que de repli.
+"""
+if ANGLES_POSITION_INITIALE is None:
+    ANGLES_POSITION_INITIALE = [160.0, 50.0, -145.0, 40.0, 0.0, 0.0]
+
+VITESSE_INIT = 40          # int, 1 a 100 : lent, le bras traverse son espace
+TIMEOUT_INIT = 25          # secondes
+
+# Retour visuel sur la LED de la carte Atom.
+COULEUR_MAIN = (0, 255, 0)        # vert : la tete est libre
+COULEUR_VERROUILLE = (255, 80, 0) # orange : la tete est tenue par les moteurs
+
 VITESSE_TETE = 20          # int, 1 a 100 (impose par pymycobot)
 TIMEOUT_TETE = 10          # secondes
 TOLERANCE_TETE = 2.0       # degres
 PERIODE_SCRUTATION = 0.2   # secondes
 
-PAS_JOG_DEFAUT = 2.0       # degres
+"""
+Ecart tolere sur J1 a J3 avant de considerer que la base a
+bouge. La calibration entiere est attachee a cette pose :
+si elle change en cours de seance, les points releves
+avant et apres ne decrivent plus la meme geometrie.
+"""
+TOLERANCE_BASE = 1.0       # degres
 
 """
 Recul applique avant chaque arrivee.
@@ -1014,6 +1076,131 @@ def approcher(mc, base, j4, j5, j6):
     return bougerTete(mc, base, j4, j5, j6)
 
 
+def signalerCouleur(mc, couleur):
+    """Change la couleur de la LED de la carte Atom, sans consequence si elle ne repond pas."""
+
+    try:
+        mc.set_color(couleur[0], couleur[1], couleur[2])
+
+    except Exception:
+        # Simple confort visuel : son echec ne doit rien interrompre.
+        pass
+
+
+def allerPositionInitiale(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEOUT_INIT):
+    """Amene le bras a sa pose de depart et retourne (arrive, pose mesuree)."""
+
+    """
+    L'arrivee n'est verifiee que sur J1, J2, J4 et J5. J3
+    est bloque sur ce bras : l'attendre ferait echouer
+    toutes les mises en position, alors que la calibration
+    n'en a pas besoin. La base sera de toute facon relue
+    telle qu'elle est, et c'est cette lecture qui fait foi.
+    """
+
+    if angles is None:
+        angles = ANGLES_POSITION_INITIALE
+
+    print()
+    print("Mise en position initiale :", [round(a, 1) for a in angles])
+    print("Le bras va traverser son espace de travail.")
+
+    if not lireTexte("Zone degagee ? [O/n] ", "o").lower().startswith("o"):
+        print("Mise en position annulee.")
+        return (False, lireAngles(mc))
+
+    try:
+        mc.send_angles(list(angles), int(vitesse))
+
+    except Exception as e:
+        print("Envoi de la pose initiale refuse :", e)
+        return (False, None)
+
+    surveilles = [0, 1, 3, 4]
+
+    debut = time.time()
+    mesure = None
+
+    while time.time() - debut < timeout:
+
+        time.sleep(PERIODE_SCRUTATION)
+
+        mesure = lireAngles(mc)
+
+        if mesure is None:
+            continue
+
+        if all(abs(mesure[i] - angles[i]) <= TOLERANCE_TETE for i in surveilles):
+            print("Position initiale atteinte.")
+            return (True, mesure)
+
+    print("ATTENTION : la pose initiale n'a pas ete atteinte dans le temps imparti.")
+
+    if mesure is not None:
+        ecarts = [round(mesure[i] - angles[i], 1) for i in surveilles]
+        print("Ecarts restants sur J1, J2, J4, J5 :", ecarts)
+
+    return (False, mesure)
+
+
+def relacherTete(mc):
+    """Coupe le couple de J4 et J5 pour orienter la tete a la main, et retourne True si c'est fait."""
+
+    """
+    C'est la ligne dangereuse du script. release_servo ne
+    previent pas et ne retient rien : la tete devient molle
+    immediatement. L'appelant doit s'etre assure que
+    quelqu'un la tient.
+    """
+
+    try:
+        for servo in SERVOS_TETE:
+            mc.release_servo(servo)
+
+    except Exception as e:
+        print("Impossible de relacher la tete :", e)
+        return False
+
+    # Laisser le temps aux servos de lacher reellement.
+    time.sleep(0.5)
+
+    signalerCouleur(mc, COULEUR_MAIN)
+
+    return True
+
+
+def verrouillerTete(mc, pose=None):
+    """Redonne le couple a J4 et J5 et fige la tete la ou elle est, puis retourne la pose tenue."""
+
+    """
+    La pose est lue AVANT de realimenter, puis renvoyee
+    comme consigne : realimenter sans consigne laisse
+    certains firmwares au repos, et la tete retombe.
+    """
+
+    if pose is None:
+        pose = lireAngles(mc)
+
+    if pose is None:
+        print("Lecture impossible : la tete ne peut pas etre verrouillee proprement.")
+        return None
+
+    try:
+        for servo in SERVOS_TETE:
+            mc.focus_servo(servo)
+
+        time.sleep(0.3)
+        mc.send_angles(list(pose), int(VITESSE_TETE))
+
+    except Exception as e:
+        print("Impossible de verrouiller la tete :", e)
+        return None
+
+    signalerCouleur(mc, COULEUR_VERROUILLE)
+
+    return pose
+
+
 # =========================================================
 # 9. DIALOGUE AVEC L'OPERATEUR
 # =========================================================
@@ -1061,86 +1248,54 @@ def lireImpact():
         return (u, v)
 
 
-def afficherAideJog(pas):
-    """Affiche les commandes disponibles pendant le pointage manuel."""
-
-    print("  q / d : J4 -%.1f / +%.1f deg" % (pas, pas))
-    print("  z / s : J5 -%.1f / +%.1f deg" % (pas, pas))
-    print("  p 0.5 : changer le pas        ok : valider ce point")
-    print("  saut  : passer ce point       fin : terminer la seance")
-
-
-def jogInteractif(mc, base, j4, j5, j6):
-    """Deplace la tete au clavier jusqu'a ce que le spot tombe sur un noeud, et retourne l'issue."""
+def pointageManuel(mc):
+    """Relache la tete, attend que l'operateur l'oriente a la main, et retourne (issue, pose)."""
 
     """
-    Le deplacement se pilote par des commandes tapees
-    plutot que par capture de touches : cela fonctionne a
-    travers une session SSH et n'ajoute aucune dependance.
+    La tete est relachee puis reverrouillee A CHAQUE
+    point. Laisser les servos libres entre deux points
+    ferait perdre le pointage des qu'on lache le bras.
     """
 
-    pas = PAS_JOG_DEFAUT
+    print("  TENIR LA TETE : elle va devenir molle.")
 
-    afficherAideJog(pas)
+    if not lireTexte("  Prete a etre relachee ? [O/n] ", "o").lower().startswith("o"):
+        return ("saut", None)
 
-    while True:
+    if not relacherTete(mc):
+        return ("saut", None)
 
-        print("  J4 = %+7.2f   J5 = %+7.2f   (pas %.2f)" % (j4, j5, pas))
+    print("  Tete libre. Orienter le spot sur un noeud du quadrillage.")
+    print("  [Entree] valider    s : sauter ce point    f : terminer")
 
-        commande = lireTexte("  jog > ").lower()
+    reponse = lireTexte("  > ").lower()
 
-        if commande in ("ok", "o"):
-            return ("ok", j4, j5)
+    # -----------------------------------------------------
+    # Releve puis reverrouillage
+    # -----------------------------------------------------
 
-        if commande in ("saut",):
-            return ("saut", j4, j5)
+    """
+    Les angles sont lus AVANT de rendre le couple : c'est
+    la pose reellement tenue a la main qui nous interesse.
+    Le verrouillage suit immediatement, quelle que soit
+    l'issue, pour ne jamais laisser la tete molle.
+    """
 
-        if commande in ("fin", "f"):
-            return ("fin", j4, j5)
+    pose = lireAngles(mc)
 
-        if commande in ("?", "aide", "h"):
-            afficherAideJog(pas)
-            continue
+    verrouillerTete(mc, pose)
 
-        if commande.startswith("p"):
-            morceaux = commande.split()
-            if len(morceaux) == 2:
-                try:
-                    pas = abs(float(morceaux[1]))
-                except ValueError:
-                    print("  Pas illisible.")
-            else:
-                print("  Utilisation : p 0.5")
-            continue
+    if reponse.startswith("f"):
+        return ("fin", pose)
 
-        cible_j4 = j4
-        cible_j5 = j5
+    if reponse.startswith("s"):
+        return ("saut", pose)
 
-        if commande == "q":
-            cible_j4 = j4 - pas
-        elif commande == "d":
-            cible_j4 = j4 + pas
-        elif commande == "z":
-            cible_j5 = j5 - pas
-        elif commande == "s":
-            cible_j5 = j5 + pas
-        else:
-            print("  Commande inconnue. Taper ? pour l'aide.")
-            continue
+    if pose is None:
+        print("  Lecture des angles impossible, point abandonne.")
+        return ("saut", None)
 
-        arrive, mesure = bougerTete(mc, base, cible_j4, cible_j5, j6)
-
-        if mesure is not None:
-            # On repart des angles REELS, pas de la consigne :
-            # sinon l'ecart accumule silencieusement.
-            j4 = mesure[3]
-            j5 = mesure[4]
-        else:
-            j4 = cible_j4
-            j5 = cible_j5
-
-        if not arrive:
-            print("  ATTENTION : la tete n'a pas atteint la consigne.")
+    return ("ok", pose)
 
 
 # =========================================================
@@ -1262,6 +1417,17 @@ def afficherProtocole():
     print("SECURITE : pointeur rouge classe 2 uniquement.")
     print("Le laser de puissance doit etre DEBRANCHE, pas seulement eteint.")
     print()
+    print("Deroulement de chaque point :")
+    print("  1. la tete est relachee -- LA TENIR avant de valider ;")
+    print("  2. vous l'orientez a la main sur un noeud du quadrillage ;")
+    print("  3. [Entree] releve les angles et reverrouille la tete ;")
+    print("  4. le robot refait l'approche par les moteurs, comme au tir :")
+    print("     le spot peut se decaler un peu, c'est normal ;")
+    print("  5. vous lisez ou le spot est tombe APRES ce mouvement.")
+    print()
+    print("Seuls les servos 4 et 5 sont relaches. L'epaule et le coude")
+    print("gardent leur couple : le bras ne s'effondre pas.")
+    print()
     print("Repartition des points :")
     print("  - une grille reguliere, environ 5 x 4, usage 'ajustement' ;")
     print("  - 4 ou 5 points hors de cette grille, usage 'validation'.")
@@ -1278,10 +1444,6 @@ def afficherProtocole():
 def seanceDeReleve(mc, base, j6, serie, usage):
     """Deroule le pointage des points un par un et retourne le nombre de points enregistres."""
 
-    angles = lireAngles(mc)
-    j4 = angles[3] if angles else 0.0
-    j5 = angles[4] if angles else 0.0
-
     index = 0
     enregistres = 0
 
@@ -1292,9 +1454,12 @@ def seanceDeReleve(mc, base, j6, serie, usage):
         print()
         print("-----------------------------------------")
         print("Point", index, "  (serie '%s', usage '%s')" % (serie, usage))
-        print("Amener le spot sur un noeud du quadrillage.")
 
-        issue, j4, j5 = jogInteractif(mc, base, j4, j5, j6)
+        # -------------------------------------------------
+        # Pointage a la main
+        # -------------------------------------------------
+
+        issue, pose = pointageManuel(mc)
 
         if issue == "fin":
             break
@@ -1303,19 +1468,50 @@ def seanceDeReleve(mc, base, j6, serie, usage):
             index -= 1
             continue
 
+        j4 = pose[3]
+        j5 = pose[4]
+
+        # -------------------------------------------------
+        # La base a-t-elle bouge ?
+        # -------------------------------------------------
+
+        """
+        J1 a J3 gardent leur couple, mais une main appuyee
+        un peu fort les deplace quand meme. Si la base
+        bouge en cours de seance, les points releves avant
+        et apres ne decrivent plus la meme geometrie : tout
+        le modele est fausse, sans que rien ne le signale.
+        """
+
+        ecarts_base = [abs(pose[i] - base[i]) for i in range(3)]
+
+        if max(ecarts_base) > TOLERANCE_BASE:
+            print("  ATTENTION : la base a bouge de %.2f deg depuis le debut." % max(ecarts_base))
+            print("  Ecarts J1, J2, J3 :", [round(e, 2) for e in ecarts_base])
+            print("  Les points deja releves ne decrivent plus la meme geometrie.")
+
+            if not lireTexte("  Garder ce point quand meme ? [o/N] ", "n").lower().startswith("o"):
+                index -= 1
+                continue
+
         # -------------------------------------------------
         # Reprise d'approche
         # -------------------------------------------------
 
         """
-        Le point est releve dans les memes conditions
-        mecaniques qu'au tir : meme sens d'arrivee, donc
-        meme rattrapage du jeu. Sans cela, la calibration
-        decrirait une position que le bras ne reproduit pas
-        quand il y revient.
+        La tete est ramenee sur ces memes angles par les
+        moteurs, en arrivant du meme cote qu'au tir. Le jeu
+        des reducteurs se replace alors comme il le fera en
+        service : le spot peut se decaler un peu, et c'est
+        precisement cette position-la qu'il faut relever.
+
+        Sans cette etape, la calibration decrirait une pose
+        obtenue a la main, que le bras ne reproduit pas
+        quand il y revient tout seul.
         """
 
         print("  Reprise d'approche...")
+
         arrive, mesure = approcher(mc, base, j4, j5, j6)
 
         if mesure is None:
@@ -1329,16 +1525,11 @@ def seanceDeReleve(mc, base, j6, serie, usage):
         j4 = mesure[3]
         j5 = mesure[4]
 
-        confirmation = lireTexte("  Le spot est-il toujours sur le noeud ? [O/n] ", "o")
-
-        if confirmation.lower().startswith("n"):
-            print("  Point abandonne, reprendre le pointage.")
-            index -= 1
-            continue
-
         # -------------------------------------------------
-        # Releve
+        # Releve de l'impact
         # -------------------------------------------------
+
+        print("  Lire la position du spot MAINTENANT : il a pu se decaler.")
 
         impact = lireImpact()
 
@@ -1380,13 +1571,29 @@ def main():
     if mc is None:
         return 1
 
-    base = lireAngles(mc)
+    # -----------------------------------------------------
+    # Pose de depart
+    # -----------------------------------------------------
 
-    if base is None:
+    """
+    Toute la calibration est attachee a la pose de base.
+    On part donc d'une pose connue et reproductible, pour
+    qu'une campagne ulterieure puisse etre comparee a
+    celle-ci plutot qu'a une position de hasard.
+    """
+
+    arrive, base_complete = allerPositionInitiale(mc)
+
+    if base_complete is None:
         return 1
 
-    j6 = base[5]
-    base = base[0:3]
+    if not arrive:
+        print()
+        if not lireTexte("Continuer malgre tout ? [o/N] ", "n").lower().startswith("o"):
+            return 1
+
+    j6 = base_complete[5]
+    base = base_complete[0:3]
 
     print()
     print("Base figee a J1 = %+.2f  J2 = %+.2f  J3 = %+.2f" % (base[0], base[1], base[2]))
@@ -1424,15 +1631,20 @@ def main():
     finally:
 
         """
-        Le pointeur est eteint quoi qu'il arrive, y compris
-        sur interruption au clavier. Les moteurs, eux,
-        restent alimentes : les couper ferait retomber le
-        bras sous son propre poids.
+        Deux choses doivent arriver quoi qu'il advienne, y
+        compris sur interruption au clavier : le pointeur
+        s'eteint, et la tete reprend son couple. Une
+        interruption pendant que les servos sont relaches
+        laisserait sinon la tete molle.
+
+        Les moteurs, eux, restent alimentes : les couper
+        ferait retomber le bras sous son propre poids.
         """
 
+        verrouillerTete(mc)
         eteindrePointeur(mc)
         print()
-        print("Pointeur eteint. Moteurs laisses sous tension.")
+        print("Tete verrouillee, pointeur eteint. Moteurs laisses sous tension.")
 
     return code_retour
 

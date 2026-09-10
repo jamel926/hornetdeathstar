@@ -127,6 +127,29 @@ class FauxBras:
         self.pose = [0.0, 50.0, self.J3_BLOQUE, 40.0, 0.0, 0.0]
         self.consignes = []
         self.sorties = []
+        self.relaches = set()
+        self.focalises = []
+        self.couleurs = []
+        self.release_all_appele = False
+
+    def release_servo(self, servo_id, mode=None):
+        self.relaches.add(servo_id)
+        return 1
+
+    def focus_servo(self, servo_id):
+        self.relaches.discard(servo_id)
+        self.focalises.append(servo_id)
+        return 1
+
+    def release_all_servos(self):
+        # Piege : ce script ne doit JAMAIS couper les six servos.
+        self.release_all_appele = True
+        self.relaches.update([1, 2, 3, 4, 5, 6])
+        return 1
+
+    def set_color(self, r, g, b):
+        self.couleurs.append((r, g, b))
+        return 1
 
     def send_angles(self, angles, vitesse):
         self.consignes.append(list(angles))
@@ -387,6 +410,153 @@ class TestPointeur(unittest.TestCase):
                          (calibration_grille.BROCHE_LASER, calibration_grille.NIVEAU_ETEINT))
 
 
+class FauxDialogue:
+    """Remplace les saisies clavier par une liste de reponses preparees."""
+
+    def __init__(self, reponses):
+        self.reponses = list(reponses)
+        self.questions = []
+
+    def __call__(self, message, defaut=""):
+        self.questions.append(message)
+        if self.reponses:
+            return self.reponses.pop(0)
+        return defaut
+
+
+class TestRelachementDeLaTete(unittest.TestCase):
+    """Relacher la tete ne doit jamais couper le couple de l'epaule ni du coude."""
+
+    def setUp(self):
+        self.bras = FauxBras()
+        self.sleep_origine = calibration_grille.time.sleep
+        calibration_grille.time.sleep = lambda duree: None
+
+    def tearDown(self):
+        calibration_grille.time.sleep = self.sleep_origine
+
+    def test_seuls_j4_et_j5_sont_relaches(self):
+        """C'est la ligne dangereuse du script : relacher les six ferait tomber le bras."""
+
+        calibration_grille.relacherTete(self.bras)
+
+        self.assertEqual(self.bras.relaches, {4, 5})
+        self.assertFalse(self.bras.release_all_appele)
+
+    def test_verrouillage_redonne_le_couple(self):
+        """Le verrouillage doit refocaliser les deux servos et figer la pose lue."""
+
+        calibration_grille.relacherTete(self.bras)
+
+        self.bras.pose = [0.0, 50.0, FauxBras.J3_BLOQUE, 55.0, -12.0, 0.0]
+
+        pose = calibration_grille.verrouillerTete(self.bras)
+
+        self.assertEqual(self.bras.relaches, set())
+        self.assertEqual(sorted(self.bras.focalises), [4, 5])
+        self.assertEqual(pose[3], 55.0)
+        self.assertEqual(self.bras.consignes[-1][3], 55.0)
+        self.assertEqual(self.bras.consignes[-1][4], -12.0)
+
+    def test_la_tete_est_verrouillee_meme_si_on_termine(self):
+        """Taper f pour terminer ne doit pas laisser la tete molle."""
+
+        origine = calibration_grille.lireTexte
+        calibration_grille.lireTexte = FauxDialogue(["o", "f"])
+
+        try:
+            issue, pose = calibration_grille.pointageManuel(self.bras)
+
+        finally:
+            calibration_grille.lireTexte = origine
+
+        self.assertEqual(issue, "fin")
+        self.assertEqual(self.bras.relaches, set())
+
+    def test_la_tete_est_verrouillee_meme_si_on_saute(self):
+        """Sauter un point ne doit pas laisser la tete molle."""
+
+        origine = calibration_grille.lireTexte
+        calibration_grille.lireTexte = FauxDialogue(["o", "s"])
+
+        try:
+            issue, pose = calibration_grille.pointageManuel(self.bras)
+
+        finally:
+            calibration_grille.lireTexte = origine
+
+        self.assertEqual(issue, "saut")
+        self.assertEqual(self.bras.relaches, set())
+
+    def test_refus_de_relacher_ne_relache_rien(self):
+        """Repondre non a la demande de confirmation ne doit couper aucun servo."""
+
+        origine = calibration_grille.lireTexte
+        calibration_grille.lireTexte = FauxDialogue(["n"])
+
+        try:
+            issue, pose = calibration_grille.pointageManuel(self.bras)
+
+        finally:
+            calibration_grille.lireTexte = origine
+
+        self.assertEqual(issue, "saut")
+        self.assertEqual(self.bras.relaches, set())
+
+    def test_validation_rend_la_pose_tenue_a_la_main(self):
+        """La pose retournee doit etre celle lue pendant que la tete etait libre."""
+
+        origine = calibration_grille.lireTexte
+        calibration_grille.lireTexte = FauxDialogue(["o", ""])
+
+        self.bras.pose = [0.0, 50.0, FauxBras.J3_BLOQUE, 62.0, -25.0, 0.0]
+
+        try:
+            issue, pose = calibration_grille.pointageManuel(self.bras)
+
+        finally:
+            calibration_grille.lireTexte = origine
+
+        self.assertEqual(issue, "ok")
+        self.assertEqual(pose[3], 62.0)
+        self.assertEqual(pose[4], -25.0)
+
+
+class TestPositionInitiale(unittest.TestCase):
+    """La mise en position ne doit pas attendre un axe mort."""
+
+    def setUp(self):
+        self.bras = FauxBras()
+        self.sleep_origine = calibration_grille.time.sleep
+        calibration_grille.time.sleep = lambda duree: None
+        self.dialogue_origine = calibration_grille.lireTexte
+        calibration_grille.lireTexte = FauxDialogue(["o"])
+
+    def tearDown(self):
+        calibration_grille.time.sleep = self.sleep_origine
+        calibration_grille.lireTexte = self.dialogue_origine
+
+    def test_arrivee_confirmee_malgre_j3(self):
+        """J3 reste loin de sa consigne : l'arrivee doit quand meme etre reconnue."""
+
+        cible = [10.0, 50.0, -145.0, 40.0, 0.0, 0.0]
+
+        arrive, mesure = calibration_grille.allerPositionInitiale(self.bras, cible)
+
+        self.assertTrue(arrive)
+        self.assertNotAlmostEqual(mesure[2], cible[2])
+
+    def test_annulation_ne_bouge_pas(self):
+        """Repondre non a la question de securite ne doit envoyer aucune consigne."""
+
+        calibration_grille.lireTexte = FauxDialogue(["n"])
+
+        arrive, mesure = calibration_grille.allerPositionInitiale(self.bras)
+
+        self.assertFalse(arrive)
+        self.assertEqual(self.bras.consignes, [])
+
+
 # =========================================================
 # 6. FICHIERS
 # =========================================================
@@ -456,6 +626,70 @@ class TestFichiers(unittest.TestCase):
 
         self.assertEqual(calibration_grille.chargerMesures(
             os.path.join(self.dossier, "rien.csv")), [])
+
+
+class TestSeanceComplete(unittest.TestCase):
+    """Le deroule d'une seance doit enchainer relachement, approche et ecriture."""
+
+    """
+    Test d'integration : il couvre le chemin que les tests
+    unitaires laissent passer, celui ou les fonctions
+    marchent chacune de leur cote mais s'enchainent mal.
+    C'est lui qui a rattrape une constante manquante.
+    """
+
+    def setUp(self):
+        self.bras = FauxBras()
+        self.dossier = tempfile.mkdtemp()
+
+        self.sleep_origine = calibration_grille.time.sleep
+        self.dialogue_origine = calibration_grille.lireTexte
+        self.fichier_origine = calibration_grille.FICHIER_MESURES
+
+        calibration_grille.time.sleep = lambda duree: None
+        calibration_grille.FICHIER_MESURES = os.path.join(self.dossier, "mesures.csv")
+
+    def tearDown(self):
+        calibration_grille.time.sleep = self.sleep_origine
+        calibration_grille.lireTexte = self.dialogue_origine
+        calibration_grille.FICHIER_MESURES = self.fichier_origine
+        shutil.rmtree(self.dossier, ignore_errors=True)
+
+    def test_deux_points_puis_fin(self):
+        """Deux points releves puis fin : deux lignes ecrites, tete verrouillee."""
+
+        calibration_grille.lireTexte = FauxDialogue([
+            "o", "", "3 -2", "",
+            "o", "", "-1 4", "essai",
+            "o", "f",
+        ])
+
+        base = [0.0, 50.0, FauxBras.J3_BLOQUE]
+
+        nombre = calibration_grille.seanceDeReleve(self.bras, base, 0.0, "s1", "ajustement")
+
+        self.assertEqual(nombre, 2)
+        self.assertEqual(self.bras.relaches, set())
+        self.assertFalse(self.bras.release_all_appele)
+
+        mesures = calibration_grille.chargerMesures(calibration_grille.FICHIER_MESURES)
+        self.assertEqual(len(mesures), 2)
+        self.assertAlmostEqual(mesures[0]["u"], 9.0)
+        self.assertAlmostEqual(mesures[1]["v"], 12.0)
+
+    def test_base_deplacee_signalee(self):
+        """Si la base a bouge, le point doit etre propose au rejet."""
+
+        self.bras.pose = [30.0, 50.0, FauxBras.J3_BLOQUE, 40.0, 0.0, 0.0]
+
+        # 3e reponse : on refuse de garder le point ; puis on termine.
+        calibration_grille.lireTexte = FauxDialogue(["o", "", "n", "o", "f"])
+
+        base = [0.0, 50.0, FauxBras.J3_BLOQUE]
+
+        nombre = calibration_grille.seanceDeReleve(self.bras, base, 0.0, "s1", "ajustement")
+
+        self.assertEqual(nombre, 0)
 
 
 # =========================================================

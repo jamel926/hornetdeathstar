@@ -53,6 +53,7 @@ from calibration_grille import (
     DOSSIER_RESULTATS,
     J4_MIN, J4_MAX, J5_MIN, J5_MAX,
     MARGE_ENVELOPPE,
+    TOLERANCE_BASE,
     allumerPointeur,
     anglesPourPoint,
     approcher,
@@ -69,8 +70,6 @@ from calibration_grille import (
 # =========================================================
 # 2. PARAMETRES
 # =========================================================
-
-TOLERANCE_BASE = 1.0        # degres
 
 FICHIER_VALIDATION = os.path.join(DOSSIER_RESULTATS, "validation_pointage.csv")
 
