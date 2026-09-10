@@ -315,6 +315,18 @@ ETENDUE_MINIMALE = 5.0     # degres
 # Iterations maximales du raffinement final.
 RAFFINEMENT_TOURS = 60
 
+"""
+Seuils d'interpretation des residus, en carreaux.
+
+Le plancher n'est pas le modele : l'operateur pose le spot
+a vue sur un noeud et relit sa position sur le quadrillage.
+En dessous d'un tiers de carreau, c'est la mesure qui limite,
+pas l'ajustement -- il n'y a plus rien a gagner de ce cote.
+Au-dela d'un carreau, quelque chose ne va pas.
+"""
+RESIDU_BON = 0.35          # carreaux
+RESIDU_MAUVAIS = 0.70      # carreaux
+
 # Bornes de recherche du decalage sur J5.
 OFFSET_J5_MIN = -60.0      # degres
 OFFSET_J5_MAX = 60.0       # degres
@@ -2015,7 +2027,7 @@ def diagnostiquer(modele, ajustement, validation):
 
     print()
 
-    if ajuste > 0.3:
+    if ajuste > RESIDU_MAUVAIS:
         print("L'ajustement colle MAL aux points releves (%.2f carreaux)." % ajuste)
         print()
         print("Ajouter des points n'y changera rien : le modele a 9 parametres,")
@@ -2036,17 +2048,61 @@ def diagnostiquer(modele, ajustement, validation):
         print("C'est le seul cas ou AJOUTER DES POINTS aide vraiment,")
         print("surtout vers les bords et les coins.")
 
+    elif ajuste > RESIDU_BON:
+        print("Le modele colle correctement (%.2f carreaux, soit %.1f cm)."
+              % (ajuste, ajuste * COTE_CARREAU))
+
+        if croise is not None:
+            print("Validation : %.2f carreaux." % croise)
+
+        print()
+        print("C'est utilisable, mais il reste de la marge. Les deux causes")
+        print("les plus probables a ce niveau sont la derive de la base")
+        print("pendant la seance, et la finesse du pointage au bord de la")
+        print("zone, ou un pas de 1 degre deplace le spot bien plus qu'au")
+        print("centre. Utiliser la touche - pour affiner les points du bord.")
+
     else:
-        print("Le modele colle bien aux mesures (%.2f carreaux)." % ajuste)
+        print("Le modele colle bien aux mesures (%.2f carreaux, soit %.1f cm)."
+              % (ajuste, ajuste * COTE_CARREAU))
 
         if croise is not None:
             print("La validation confirme (%.2f carreaux)." % croise)
 
         print()
+        print("A ce niveau, c'est la mesure qui limite et non l'ajustement :")
+        print("le spot est pose a vue et relu sur le quadrillage. Il n'y a")
+        print("plus rien a gagner sur le modele.")
+        print()
         print("Si le spot tombe quand meme a cote au moment de viser, ce n'est")
         print("pas le modele : c'est la REPRODUCTIBILITE du bras. Le verifier")
         print("avec calibration_test.py, en visant plusieurs fois le meme point")
         print("depuis des poses differentes et en relevant l'ecart a chaque fois.")
+
+    # -----------------------------------------------------
+    # Biais
+    # -----------------------------------------------------
+
+    """
+    Un decalage constant n'est pas du bruit : il se rattrape
+    d'un seul coup, alors qu'une dispersion ne se rattrape
+    pas. Le distinguer evite de chercher a ameliorer une
+    calibration qui n'a besoin que d'un recalage.
+    """
+
+    reference = modele.get("residus_validation") or residus
+
+    biais = math.hypot(reference["biais_u_carreaux"], reference["biais_v_carreaux"])
+
+    if biais > 0.5 * max(reference["dispersion_carreaux"], 1e-6):
+        print()
+        print("Le modele est DECALE de facon constante : %+.2f en u, %+.2f en v"
+              % (reference["biais_u_carreaux"], reference["biais_v_carreaux"]))
+        print("(%.2f carreaux au total, pour %.2f de dispersion)."
+              % (biais, reference["dispersion_carreaux"]))
+        print("Un decalage constant se rattrape ; une dispersion non. Verifier")
+        print("que le noeud d'origine est bien le meme qu'a la calibration, et")
+        print("que la base n'a pas bouge depuis.")
 
     print()
     print("Rappel : 1 carreau = %.0f cm." % COTE_CARREAU)
