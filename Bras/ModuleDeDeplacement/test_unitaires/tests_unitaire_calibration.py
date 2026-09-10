@@ -235,6 +235,52 @@ class TestModeleGeometrique(unittest.TestCase):
         self.assertLess(residus["max_carreaux"], 1e-6)
 
 
+class TestRaffinement(unittest.TestCase):
+    """Le raffinement doit ameliorer l'ajustement, jamais le degrader."""
+
+    def test_le_raffinement_ne_degrade_jamais(self):
+        """Sur des points bruites, l'ecart apres raffinement doit etre au plus celui du DLT."""
+
+        """
+        Le DLT minimise une erreur algebrique, pas l'ecart en
+        carreaux. Sur la campagne reelle du 10/09 il laissait
+        2,42 cm d'ecart moyen la ou le meme modele, ajuste sur
+        l'ecart reel, en laisse 0,93.
+        """
+
+        import random
+        random.seed(4)
+
+        tourelle = tourelleDeReference()
+        mesures = mesuresSynthetiques(tourelle)
+
+        for m in mesures:
+            m["u"] += random.gauss(0, 0.4)
+            m["v"] += random.gauss(0, 0.4)
+
+        depart = calibration_grille.chercherOffsetJ5(mesures)
+        self.assertIsNotNone(depart)
+
+        offset, h = depart
+
+        avant = calibration_grille.ecartQuadratique(h, offset, mesures)
+
+        params = calibration_grille.raffinerModele(list(h[:8]) + [offset], mesures)
+        apres = calibration_grille.ecartQuadratique(
+            list(params[:8]) + [1.0], params[8], mesures)
+
+        self.assertLessEqual(apres, avant + 1e-9)
+
+    def test_modele_exact_reste_exact(self):
+        """Sur des points sans bruit, le raffinement ne doit pas casser la solution exacte."""
+
+        mesures = mesuresSynthetiques(tourelleDeReference())
+
+        modele = calibration_grille.ajusterModele(mesures)
+
+        self.assertLess(modele["residus"]["max_carreaux"], 1e-5)
+
+
 class TestComparaisonBilineaire(unittest.TestCase):
     """Le temoin bilineaire justifie le choix du modele geometrique."""
 

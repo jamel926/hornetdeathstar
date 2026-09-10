@@ -312,6 +312,9 @@ varie.
 """
 ETENDUE_MINIMALE = 5.0     # degres
 
+# Iterations maximales du raffinement final.
+RAFFINEMENT_TOURS = 60
+
 # Bornes de recherche du decalage sur J5.
 OFFSET_J5_MIN = -60.0      # degres
 OFFSET_J5_MAX = 60.0       # degres
@@ -558,6 +561,130 @@ def chercherOffsetJ5(mesures):
     return (meilleur_offset, meilleur_h)
 
 
+def residusModele(params, mesures):
+    """Retourne les ecarts signes du modele aux mesures, deux par point, ou None."""
+
+    h = list(params[:8]) + [1.0]
+    offset = params[8]
+
+    ecarts = []
+
+    for m in mesures:
+
+        evaluation = evaluerHomographie(h, directionFaisceau(m["j4"], m["j5"] + offset))
+
+        if evaluation is None:
+            return None
+
+        ecarts.append(evaluation[0] - m["u"])
+        ecarts.append(evaluation[1] - m["v"])
+
+    return ecarts
+
+
+def raffinerModele(params, mesures, tours=RAFFINEMENT_TOURS):
+    """Affine les neuf parametres en minimisant l'ecart reel, et retourne les parametres obtenus."""
+
+    """
+    L'ajustement DLT ne minimise pas l'ecart en carreaux mais
+    une erreur algebrique, celle des produits croises. Les
+    deux ne coincident pas : sur une campagne reelle le DLT
+    seul laissait 2,4 cm d'ecart moyen la ou le meme modele,
+    ajuste sur l'ecart reel, en laisse 0,9.
+
+    Le DLT reste le point de depart -- il donne une solution
+    correcte sans rien supposer -- et cette descente de
+    Levenberg-Marquardt termine le travail. Jacobien calcule
+    par differences finies : neuf parametres, quelques
+    dizaines de residus, le cout est negligeable.
+    """
+
+    courant = list(params)
+
+    ecarts = residusModele(courant, mesures)
+
+    if ecarts is None:
+        return list(params)
+
+    cout = sum(e * e for e in ecarts)
+    amorti = 1e-3
+
+    nombre = len(courant)
+
+    for _ in range(tours):
+
+        # -------------------------------------------------
+        # Jacobien par differences finies
+        # -------------------------------------------------
+
+        jacobien = []
+
+        for i in range(nombre):
+
+            pas = max(1e-7, abs(courant[i]) * 1e-6)
+
+            decale = list(courant)
+            decale[i] += pas
+
+            voisins = residusModele(decale, mesures)
+
+            if voisins is None:
+                return courant
+
+            jacobien.append([(a - b) / pas for a, b in zip(voisins, ecarts)])
+
+        # -------------------------------------------------
+        # Systeme normal amorti
+        # -------------------------------------------------
+
+        normale = [[sum(jacobien[i][k] * jacobien[j][k] for k in range(len(ecarts)))
+                    for j in range(nombre)] for i in range(nombre)]
+
+        membre = [-sum(jacobien[i][k] * ecarts[k] for k in range(len(ecarts)))
+                  for i in range(nombre)]
+
+        for i in range(nombre):
+            normale[i][i] *= (1.0 + amorti)
+
+        correction = resoudreSysteme(normale, membre)
+
+        if correction is None:
+            break
+
+        essai = [courant[i] + correction[i] for i in range(nombre)]
+
+        ecarts_essai = residusModele(essai, mesures)
+
+        if ecarts_essai is None:
+            amorti *= 10.0
+            continue
+
+        cout_essai = sum(e * e for e in ecarts_essai)
+
+        # -------------------------------------------------
+        # On n'accepte qu'une amelioration
+        # -------------------------------------------------
+
+        if cout_essai < cout:
+            courant = essai
+            ecarts = ecarts_essai
+
+            if cout - cout_essai < 1e-12 * max(cout, 1.0):
+                cout = cout_essai
+                break
+
+            cout = cout_essai
+            amorti = max(1e-9, amorti / 3.0)
+
+        else:
+            amorti *= 10.0
+
+            if amorti > 1e8:
+                break
+
+    return courant
+
+
 def ajusterModele(mesures, etiquette_robot="", base=None, commentaire=""):
     """Ajuste le modele complet sur les mesures et retourne le dictionnaire du modele, ou None."""
 
@@ -586,6 +713,15 @@ def ajusterModele(mesures, etiquette_robot="", base=None, commentaire=""):
         return None
 
     offset_j5, h = resultat
+
+    # -----------------------------------------------------
+    # Raffinement sur l'ecart reel
+    # -----------------------------------------------------
+
+    params = raffinerModele(list(h[:8]) + [offset_j5], mesures)
+
+    h = list(params[:8]) + [1.0]
+    offset_j5 = params[8]
 
     # -----------------------------------------------------
     # Signe du facteur de profondeur
