@@ -203,6 +203,7 @@ def aller_en_position_visee(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEO
         
         mc.send_angles(angles, int(vitesse))
         debut = time.time()
+        time.sleep(0.05)
         # Attendre que le mouvement démarre (QUE IS MOVING PASSE À 1)
         while mc.is_moving() != 1:
             time.sleep(0.05)
@@ -268,7 +269,10 @@ def aller_en_position_visee(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEO
 
 def main():
     """Sequence complete de mise en position initiale, avec confirmation de l'operateur."""
-    Mise_en_Position_Initiale(50)
+    res = Mise_en_Position_Initiale(50)
+    if res != 1 :
+        print("Un problème est survenu") 
+        return 1
 
     VAL_J1 = 0.0 #float(input("Valeur de J1 voulue : "))
     VAL_J2 = 50.0 #float(input("Valeur de J2 voulue : "))
