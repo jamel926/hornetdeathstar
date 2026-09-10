@@ -198,7 +198,7 @@ class TestModeleGeometrique(unittest.TestCase):
         modele = calibration_grille.ajusterModele(self.mesures)
 
         self.assertIsNotNone(modele)
-        self.assertLess(modele["residus"]["max_cm"], 1e-6)
+        self.assertLess(modele["residus"]["max_carreaux"], 1e-6)
 
     def test_decalage_j5_retrouve(self):
         """Le decalage de J5 est identifiable : il doit etre retrouve au centieme de degre."""
@@ -232,7 +232,7 @@ class TestModeleGeometrique(unittest.TestCase):
 
         residus = calibration_grille.calculerResidus(modele, controle)
 
-        self.assertLess(residus["max_cm"], 1e-6)
+        self.assertLess(residus["max_carreaux"], 1e-6)
 
 
 class TestComparaisonBilineaire(unittest.TestCase):
@@ -253,8 +253,8 @@ class TestComparaisonBilineaire(unittest.TestCase):
         temoin = calibration_grille.residusBilineaire(
             calibration_grille.ajusterBilineaire(mesures), mesures)
 
-        self.assertGreater(temoin["max_cm"], 1.0)
-        self.assertGreater(temoin["max_cm"], 100.0 * modele["residus"]["max_cm"])
+        self.assertGreater(temoin["max_carreaux"], 1.0)
+        self.assertGreater(temoin["max_carreaux"], 100.0 * modele["residus"]["max_carreaux"])
 
 
 class TestRefus(unittest.TestCase):
@@ -325,9 +325,9 @@ class TestResidus(unittest.TestCase):
 
         residus = calibration_grille.calculerResidus(modele, decalees)
 
-        self.assertAlmostEqual(residus["biais_u_cm"], 2.0, places=4)
-        self.assertAlmostEqual(residus["biais_v_cm"], -1.0, places=4)
-        self.assertLess(residus["dispersion_cm"], 1e-6)
+        self.assertAlmostEqual(residus["biais_u_carreaux"], 2.0, places=4)
+        self.assertAlmostEqual(residus["biais_v_carreaux"], -1.0, places=4)
+        self.assertLess(residus["dispersion_carreaux"], 1e-6)
 
 
 # =========================================================
@@ -837,11 +837,11 @@ class TestFichiers(unittest.TestCase):
         pose = [0.0, 50.0, -124.0, 30.0, -10.0, 0.0]
 
         calibration_grille.enregistrerPoint("s1", "ajustement", 1, (30.0, -10.0),
-                                            pose, (6.0, -3.0), "", self.chemin)
+                                            pose, (6.0, -3.0), self.chemin)
         calibration_grille.enregistrerPoint("s1", "ajustement", 2, (35.0, -5.0),
-                                            pose, (9.0, 0.0), "", self.chemin)
+                                            pose, (9.0, 0.0), self.chemin)
         calibration_grille.enregistrerPoint("s1", "validation", 3, (20.0, 5.0),
-                                            pose, (3.0, 3.0), "hors grille", self.chemin)
+                                            pose, (3.0, 3.0), self.chemin)
 
     def test_relecture(self):
         """Les points relus doivent porter les angles mesures et l'impact en centimetres."""
@@ -853,6 +853,29 @@ class TestFichiers(unittest.TestCase):
         self.assertEqual(len(mesures), 3)
         self.assertAlmostEqual(mesures[0]["j4"], 30.0)
         self.assertAlmostEqual(mesures[0]["u"], 6.0)
+
+    def test_relecture_d_une_campagne_en_centimetres(self):
+        """Une campagne enregistree en centimetres doit rester exploitable."""
+
+        """
+        Le passage au carreau ne doit pas rendre illisibles
+        les releves deja faits : ils sont convertis a la
+        lecture.
+        """
+
+        chemin = os.path.join(self.dossier, "ancien.csv")
+
+        with open(chemin, "w") as fichier:
+            fichier.write("horodatage,serie,usage,index,j4_consigne,j5_consigne,"
+                          "J1,J2,J3,J4,J5,J6,u_cm,v_cm,commentaire\n")
+            fichier.write("2026-09-10T10:00:00,s0,ajustement,1,30,-10,"
+                          "0,50,-124,30,-10,0,9.0,-6.0,\n")
+
+        mesures = calibration_grille.chargerMesures(chemin)
+
+        self.assertEqual(len(mesures), 1)
+        self.assertAlmostEqual(mesures[0]["u"], 3.0)
+        self.assertAlmostEqual(mesures[0]["v"], -2.0)
 
     def test_separation_des_usages(self):
         """Les points de validation ne doivent jamais entrer dans l'ajustement."""
@@ -925,10 +948,7 @@ class TestSeanceComplete(unittest.TestCase):
             "haut", "entree",
             "f",
         ])
-        calibration_grille.lireTexte = FauxDialogue([
-            "3 -2", "",
-            "-1 4", "essai",
-        ])
+        calibration_grille.lireTexte = FauxDialogue(["3 -2", "-1 4"])
 
         base = [0.0, 50.0, FauxBras.J3_BLOQUE]
 
@@ -940,8 +960,8 @@ class TestSeanceComplete(unittest.TestCase):
 
         mesures = calibration_grille.chargerMesures(calibration_grille.FICHIER_MESURES)
         self.assertEqual(len(mesures), 2)
-        self.assertAlmostEqual(mesures[0]["u"], 9.0)
-        self.assertAlmostEqual(mesures[1]["v"], 12.0)
+        self.assertAlmostEqual(mesures[0]["u"], 3.0)
+        self.assertAlmostEqual(mesures[1]["v"], 4.0)
 
     def test_angles_enregistres_sont_ceux_atteints(self):
         """La pose ecrite doit etre celle mesuree au moment de la validation."""
@@ -954,7 +974,7 @@ class TestSeanceComplete(unittest.TestCase):
         """
 
         calibration_grille.lireTouche = FauxClavier(["droite", "droite", "entree", "f"])
-        calibration_grille.lireTexte = FauxDialogue(["0 0", ""])
+        calibration_grille.lireTexte = FauxDialogue(["0 0"])
 
         base = [0.0, 50.0, FauxBras.J3_BLOQUE]
 

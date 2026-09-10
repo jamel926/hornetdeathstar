@@ -164,8 +164,22 @@ except Exception:
 PORT = "/dev/ttyTHS1"
 BAUDRATE = 1000000
 
-# Cote d'un carreau du quadrillage pose au sol.
-COTE_CARREAU = 3.0         # centimetres
+"""
+Le CARREAU est l'unite de travail du script, de bout en
+bout : saisie, modele, residus, affichages. Rien n'est
+converti nulle part.
+
+C'est ce que l'operateur lit reellement sur le quadrillage.
+Melanger deux unites dans une chaine de mesure finit
+toujours par produire un facteur d'echelle silencieux, et
+ici il vaudrait 3.
+
+La valeur ci-dessous ne sert qu'a deux choses : relire les
+campagnes enregistrees en centimetres, et convertir les
+resultats quand on veut les comparer a une longueur
+physique.
+"""
+COTE_CARREAU = 3.0         # centimetres, pour information
 
 """
 Commande du pointeur.
@@ -284,7 +298,7 @@ J4_MIN, J4_MAX = -150.0, 150.0     # degres
 J5_MIN, J5_MAX = -155.0, 160.0     # degres
 
 # Marge acceptee au-dela de la zone reellement pointee.
-MARGE_ENVELOPPE = 2.0      # centimetres
+MARGE_ENVELOPPE = 0.7      # carreaux
 
 """
 Etendue angulaire minimale exigee sur CHACUN des deux axes.
@@ -323,7 +337,7 @@ ENTETE_CSV = [
     "horodatage", "serie", "usage", "index",
     "j4_consigne", "j5_consigne",
     "J1", "J2", "J3", "J4", "J5", "J6",
-    "u_cm", "v_cm", "commentaire"
+    "u_carreaux", "v_carreaux"
 ]
 
 DOSSIER_RESULTATS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resultats")
@@ -477,7 +491,7 @@ def evaluerHomographie(h, p):
 
 
 def ecartQuadratique(h, offset_j5, mesures):
-    """Retourne l'ecart quadratique moyen entre impacts predits et mesures, en centimetres."""
+    """Retourne l'ecart quadratique moyen entre impacts predits et mesures, en carreaux."""
 
     total = 0.0
 
@@ -610,7 +624,7 @@ def ajusterModele(mesures, etiquette_robot="", base=None, commentaire=""):
         "robot": etiquette_robot,
         "commentaire": commentaire,
         "modele": "homographie",
-        "unite": "cm",
+        "unite": "carreau",
         "nb_points": len(mesures),
         "cote_carreau": COTE_CARREAU,
         "base": list(base) if base is not None else None,
@@ -635,7 +649,7 @@ def ajusterModele(mesures, etiquette_robot="", base=None, commentaire=""):
 
 
 def predireImpact(modele, j4, j5):
-    """Retourne (u, v) en centimetres pour un couple d'angles, ou None si le modele n'evalue pas."""
+    """Retourne (u, v) en carreaux pour un couple d'angles, ou None si le modele n'evalue pas."""
 
     p = directionFaisceau(j4, j5 + modele["offset_j5"])
 
@@ -751,12 +765,12 @@ def calculerResidus(modele, mesures):
 
     return {
         "nb_points": nombre,
-        "rms_cm": math.sqrt(sum(d ** 2 for d in distances) / nombre),
-        "max_cm": max(distances),
-        "biais_u_cm": biais_u,
-        "biais_v_cm": biais_v,
-        "dispersion_cm": dispersion,
-        "par_point_cm": distances,
+        "rms_carreaux": math.sqrt(sum(d ** 2 for d in distances) / nombre),
+        "max_carreaux": max(distances),
+        "biais_u_carreaux": biais_u,
+        "biais_v_carreaux": biais_v,
+        "dispersion_carreaux": dispersion,
+        "par_point_carreaux": distances,
     }
 
 
@@ -805,7 +819,7 @@ def ajusterBilineaire(mesures):
 
 
 def residusBilineaire(bilineaire, mesures):
-    """Retourne l'ecart quadratique moyen et l'ecart maximum du temoin bilineaire, en centimetres."""
+    """Retourne l'ecart quadratique moyen et l'ecart maximum du temoin bilineaire, en carreaux."""
 
     if bilineaire is None:
         return None
@@ -827,8 +841,8 @@ def residusBilineaire(bilineaire, mesures):
         return None
 
     return {
-        "rms_cm": math.sqrt(sum(d ** 2 for d in distances) / len(distances)),
-        "max_cm": max(distances),
+        "rms_carreaux": math.sqrt(sum(d ** 2 for d in distances) / len(distances)),
+        "max_carreaux": max(distances),
     }
 
 
@@ -836,7 +850,7 @@ def residusBilineaire(bilineaire, mesures):
 # 7. LECTURE ET ECRITURE DES FICHIERS
 # =========================================================
 
-def enregistrerPoint(serie, usage, index, consigne, mesure, impact, commentaire, chemin=None):
+def enregistrerPoint(serie, usage, index, consigne, mesure, impact, chemin=None):
     """Ajoute une ligne au fichier de mesures, en creant l'entete au premier point."""
 
     """
@@ -866,7 +880,6 @@ def enregistrerPoint(serie, usage, index, consigne, mesure, impact, commentaire,
                 round(mesure[0], 3), round(mesure[1], 3), round(mesure[2], 3),
                 round(mesure[3], 3), round(mesure[4], 3), round(mesure[5], 3),
                 round(impact[0], 3), round(impact[1], 3),
-                commentaire,
             ])
 
         return True
@@ -875,6 +888,29 @@ def enregistrerPoint(serie, usage, index, consigne, mesure, impact, commentaire,
         print("Impossible d'ecrire le point dans le fichier.")
         print("Erreur :", e)
         return False
+
+
+def lireImpactDuFichier(ligne):
+    """Retourne l'impact d'une ligne de mesures en carreaux, ou None si elle n'en porte pas."""
+
+    """
+    Les campagnes faites avant le passage au carreau portent
+    des colonnes en centimetres. Elles restent exploitables :
+    on les convertit a la lecture plutot que de les perdre.
+    """
+
+    try:
+        if ligne.get("u_carreaux") and ligne.get("v_carreaux"):
+            return (float(ligne["u_carreaux"]), float(ligne["v_carreaux"]))
+
+        if ligne.get("u_cm") and ligne.get("v_cm"):
+            return (float(ligne["u_cm"]) / COTE_CARREAU,
+                    float(ligne["v_cm"]) / COTE_CARREAU)
+
+    except ValueError:
+        return None
+
+    return None
 
 
 def chargerMesures(chemin=None, usage=None, serie=None):
@@ -896,16 +932,17 @@ def chargerMesures(chemin=None, usage=None, serie=None):
                 if serie is not None and ligne.get("serie") != serie:
                     continue
 
-                # Un point saute n'a pas d'impact releve.
-                if not ligne.get("u_cm") or not ligne.get("v_cm"):
+                impact = lireImpactDuFichier(ligne)
+
+                if impact is None:
                     continue
 
                 try:
                     mesures.append({
                         "j4": float(ligne["J4"]),
                         "j5": float(ligne["J5"]),
-                        "u": float(ligne["u_cm"]),
-                        "v": float(ligne["v_cm"]),
+                        "u": impact[0],
+                        "v": impact[1],
                     })
 
                 except (ValueError, KeyError):
@@ -974,10 +1011,10 @@ def afficherResidus(titre, residus):
         return
 
     print("  points            :", residus["nb_points"])
-    print("  ecart moyen (rms) : %.2f cm" % residus["rms_cm"])
-    print("  ecart maximum     : %.2f cm" % residus["max_cm"])
-    print("  biais             : u %+.2f cm   v %+.2f cm" % (residus["biais_u_cm"], residus["biais_v_cm"]))
-    print("  dispersion        : %.2f cm" % residus["dispersion_cm"])
+    print("  ecart moyen (rms) : %.2f carreaux" % residus["rms_carreaux"])
+    print("  ecart maximum     : %.2f carreaux" % residus["max_carreaux"])
+    print("  biais             : u %+.2f   v %+.2f" % (residus["biais_u_carreaux"], residus["biais_v_carreaux"]))
+    print("  dispersion        : %.2f carreaux" % residus["dispersion_carreaux"])
 
 
 # =========================================================
@@ -1526,9 +1563,9 @@ def lireTouche(clavier_actif=None):
 
 
 def lireImpact():
-    """Demande les coordonnees du noeud vise en carreaux et retourne (u, v) en centimetres, ou None."""
+    """Demande les coordonnees du noeud vise en carreaux et les retourne, ou None."""
 
-    print("  Coordonnees du noeud, en CARREAUX (ex : 3 -2).")
+    print("  Coordonnees du noeud, en carreaux (ex : 3 -2).")
     print("  Taper s pour sauter ce point.")
 
     while True:
@@ -1545,15 +1582,10 @@ def lireImpact():
             continue
 
         try:
-            u = float(morceaux[0]) * COTE_CARREAU
-            v = float(morceaux[1]) * COTE_CARREAU
+            return (float(morceaux[0]), float(morceaux[1]))
 
         except ValueError:
             print("  Saisie illisible.")
-            continue
-
-        print("  soit u = %.1f cm, v = %.1f cm" % (u, v))
-        return (u, v)
 
 
 def afficherAideClavier(pas):
@@ -1751,6 +1783,139 @@ def controlerDomaine(modele, mesures):
         print("Le modele ne sait pas les inverser. Reduire la plage de J5.")
 
 
+def pointsAberrants(modele, mesures, facteur=3.0):
+    """Retourne les points dont l'ecart depasse le facteur donne fois l'ecart moyen."""
+
+    """
+    Un point tres au-dessus des autres n'est pas du bruit :
+    c'est presque toujours une coordonnee mal saisie, ou un
+    noeud compte de travers. Le retirer vaut mieux que de
+    laisser le modele se deformer pour l'atteindre.
+    """
+
+    residus = calculerResidus(modele, mesures)
+
+    if residus is None or residus["rms_carreaux"] <= 0.0:
+        return []
+
+    seuil = facteur * residus["rms_carreaux"]
+
+    aberrants = []
+
+    for indice, ecart in enumerate(residus["par_point_carreaux"]):
+        if ecart > seuil:
+            aberrants.append((indice, ecart, mesures[indice]))
+
+    return aberrants
+
+
+def diagnostiquer(modele, ajustement, validation):
+    """Affiche ce que les residus disent de l'origine de l'erreur."""
+
+    """
+    Le but est d'eviter la fausse manoeuvre la plus courante :
+    ajouter des points quand ce n'est pas le nombre de points
+    qui limite. Le modele a neuf parametres ; vingt points en
+    donnent deja quarante equations. Si l'ajustement colle
+    mal, en ajouter ne changera rien.
+    """
+
+    print()
+    print("-----------------------------------------")
+    print("DIAGNOSTIC")
+    print("-----------------------------------------")
+
+    residus = modele.get("residus")
+
+    if residus is None:
+        print("Pas de residus exploitables.")
+        return
+
+    ajuste = residus["rms_carreaux"]
+    croise = validation and modele.get("residus_validation")
+    croise = croise["rms_carreaux"] if croise else None
+
+    # -----------------------------------------------------
+    # Points aberrants
+    # -----------------------------------------------------
+
+    aberrants = pointsAberrants(modele, ajustement)
+
+    if aberrants:
+        print()
+        print("%d point(s) tres au-dessus des autres :" % len(aberrants))
+
+        for indice, ecart, point in aberrants:
+            print("  point %d : carreau (%.1f, %.1f), ecart %.2f carreaux"
+                  % (indice + 1, point["u"], point["v"], ecart))
+
+        print("Verifier ces coordonnees dans le fichier : une saisie de travers")
+        print("deforme tout le modele. Les corriger vaut mieux qu'en ajouter.")
+
+    # -----------------------------------------------------
+    # Zone couverte
+    # -----------------------------------------------------
+
+    """
+    Le modele refuse de viser hors de l'enveloppe relevee.
+    Afficher cette enveloppe evite la surprise classique :
+    des points refuses parce que la calibration ne couvrait
+    pas les bords.
+    """
+
+    e = modele["enveloppe"]
+
+    largeur = e["u_max"] - e["u_min"]
+    hauteur = e["v_max"] - e["v_min"]
+
+    print()
+    print("Zone calibree : u de %.0f a %.0f, v de %.0f a %.0f carreaux (%.0f x %.0f)."
+          % (e["u_min"], e["u_max"], e["v_min"], e["v_max"], largeur, hauteur))
+    print("Viser hors de cette zone sera refuse.")
+
+    # -----------------------------------------------------
+    # Interpretation
+    # -----------------------------------------------------
+
+    print()
+
+    if ajuste > 0.3:
+        print("L'ajustement colle MAL aux points releves (%.2f carreaux)." % ajuste)
+        print()
+        print("Ajouter des points n'y changera rien : le modele a 9 parametres,")
+        print("20 points en donnent deja 40 equations. Ce qui limite est ailleurs.")
+        print("Par ordre de probabilite :")
+        print("  1. des coordonnees saisies de travers (voir ci-dessus) ;")
+        print("  2. la base a bouge pendant la seance -- le script le signale,")
+        print("     mais un choc entre deux points passe inapercu ;")
+        print("  3. le laser est trop decale de l'axe du poignet pour que")
+        print("     l'hypothese du point d'emission fixe tienne sur cette zone.")
+        print("     Dans ce cas seul un modele plus riche aiderait.")
+
+    elif croise is not None and croise > 2.0 * max(ajuste, 0.05):
+        print("L'ajustement colle bien (%.2f) mais la validation decroche (%.2f)."
+              % (ajuste, croise))
+        print()
+        print("Le modele decrit les points qui l'ont produit et pas la zone.")
+        print("C'est le seul cas ou AJOUTER DES POINTS aide vraiment,")
+        print("surtout vers les bords et les coins.")
+
+    else:
+        print("Le modele colle bien aux mesures (%.2f carreaux)." % ajuste)
+
+        if croise is not None:
+            print("La validation confirme (%.2f carreaux)." % croise)
+
+        print()
+        print("Si le spot tombe quand meme a cote au moment de viser, ce n'est")
+        print("pas le modele : c'est la REPRODUCTIBILITE du bras. Le verifier")
+        print("avec calibration_test.py, en visant plusieurs fois le meme point")
+        print("depuis des poses differentes et en relevant l'ecart a chaque fois.")
+
+    print()
+    print("Rappel : 1 carreau = %.0f cm." % COTE_CARREAU)
+
+
 def ajusterEtEnregistrer(serie=None, base=None, etiquette_robot="", commentaire=""):
     """Ajuste le modele sur les points de la seance, affiche le bilan et l'enregistre."""
 
@@ -1801,7 +1966,7 @@ def ajusterEtEnregistrer(serie=None, base=None, etiquette_robot="", commentaire=
         afficherResidus("Residus sur les points de VALIDATION :", residus_validation)
 
         if residus_validation is not None and modele["residus"] is not None:
-            if residus_validation["rms_cm"] > 3.0 * modele["residus"]["rms_cm"]:
+            if residus_validation["rms_carreaux"] > 3.0 * modele["residus"]["rms_carreaux"]:
                 print()
                 print("ATTENTION : l'erreur en validation est bien pire qu'en ajustement.")
                 print("Le modele colle aux points de calibration sans decrire la zone.")
@@ -1819,12 +1984,14 @@ def ajusterEtEnregistrer(serie=None, base=None, etiquette_robot="", commentaire=
     if temoin is not None:
         print()
         print("Pour comparaison, le modele bilineaire de PU_Pointage")
-        print("sur les memes points : rms %.2f cm, max %.2f cm" % (temoin["rms_cm"], temoin["max_cm"]))
+        print("sur les memes points : rms %.2f carreaux, max %.2f carreaux" % (temoin["rms_carreaux"], temoin["max_carreaux"]))
         modele["temoin_bilineaire"] = temoin
 
     # -----------------------------------------------------
     # Enregistrement
     # -----------------------------------------------------
+
+    diagnostiquer(modele, ajustement, validation)
 
     if enregistrerModele(modele):
         print()
@@ -1868,8 +2035,9 @@ def afficherProtocole():
     print("zone utile. Le modele refuse d'extrapoler : ne pointer que le")
     print("centre reviendrait a ne calibrer que le centre.")
     print()
-    print("Carreau de %.1f cm. Le noeud (0, 0) est celui que vous choisissez" % COTE_CARREAU)
-    print("comme origine : gardez le meme pendant toute la seance.")
+    print("Tout se compte en CARREAUX (un carreau = %.0f cm)." % COTE_CARREAU)
+    print("Le noeud (0, 0) est celui que vous choisissez comme origine :")
+    print("gardez le meme pendant toute la seance.")
     print()
 
 
@@ -1945,12 +2113,10 @@ def seanceDeReleve(mc, base, j6, serie, usage):
             index -= 1
             continue
 
-        commentaire = lireTexte("  Commentaire (facultatif) > ")
-
-        if enregistrerPoint(serie, usage, index, (j4, j5), pose, impact, commentaire):
+        if enregistrerPoint(serie, usage, index, (j4, j5), pose, impact):
             enregistres += 1
-            print("  Point enregistre : J4 = %+.2f  J5 = %+.2f  ->  u = %.1f  v = %.1f"
-                  % (j4, j5, impact[0], impact[1]))
+            print("  Point %d enregistre : J4 = %+.2f  J5 = %+.2f  ->  carreau (%.1f, %.1f)"
+                  % (enregistres, j4, j5, impact[0], impact[1]))
 
     return enregistres
 
