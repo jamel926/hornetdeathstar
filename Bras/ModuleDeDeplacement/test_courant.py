@@ -57,7 +57,7 @@ BAUDRATE = 1000000
 # Vitesse volontairement faible : la mise en position
 # initiale part d'une pose inconnue, le bras peut avoir
 # un long chemin a parcourir.
-VITESSE_INIT = 20        # int, 1 a 100 (impose par pymycobot)
+VITESSE_INIT =100        # int, 1 a 100 (impose par pymycobot)
 
 # Duree maximale accordee au bras pour atteindre la pose.
 TIMEOUT_INIT = 15        # secondes
@@ -110,12 +110,12 @@ ANGLES_POSITION_INITIALE = [
     1.0       # J6 - rotation finale de l'outil
 ]'''
 ANGLES_POSITION_INITIALE = [
-    45.0,      # J1 - rotation de la base
+    0.0,      # J1 - rotation de la base
     0.0,     # J2 - epaule
     -136,   # J3 - coude
-    51.0,     # J4 - poignet
+    5.0,     # J4 - poignet
     1.0,      # J5 - inclinaison de l'outil
-    51.0       # J6 - rotation finale de l'outil
+    1.0       # J6 - rotation finale de l'outil
 ]
 # =========================================================
 # 6. CONNEXION AU ROBOT
@@ -295,30 +295,7 @@ def estEnPositionInitiale(mc, angles=None, tolerance=TOLERANCE_ANGLE):
 
     return ecartMaximal(angles_mesures, angles) <= tolerance
 
-# =========================================================
-# 10. Paul
-# =========================================================
-def GetStatus(mc): 
-    a = mc.get_servo_status()
-    return a
 
-
-def Problem(a): 
-    if a != [0,0,0,0,0,0]: 
-        for i in range(0, 6): 
-            if a[i] != [0]:
-                print(f"Voltage Problem sur le moteur {i+1}")
-            elif a[i] != [1]:
-                print(f"Sensor Problem sur le moteur {i+1}")
-            elif a[i] != [2]:
-                print(f"Temperature Problem sur le moteur {i+1}")
-            elif a[i] != [3]:
-                print(f"current Problem sur le moteur {i+1}")
-            elif a[i] != [4]:
-                print(f"angle Problem sur le moteur {i+1}")
-            elif a[i] != [5]:
-                print(f"angle Problem sur le moteur {i+1}")
-        return True
 
 # =========================================================
 # SECURITE
@@ -372,10 +349,19 @@ def blocage_vitesse_moteur(mc, angle_cible):
     for i in range(6):
         if i !=2:  
             ecart = abs(angle_actuel[i]-angle_cible[i])
-            if ecart > ecart_minimal and abs(speed[i])<250: 
+            if ecart > ecart_minimal and abs(speed[i])<150: 
                 print(f"Blocage sur le moteur J{i+1}")
                 return True
     return False 
+
+
+def ReculerPositionPrec(mc, angles_prec, vitesse): 
+    if angles_prec is None: 
+        print(f"pas de postion précédente connue, le bras reste à l'arrêt")
+        return
+    print(f"retour à la position précédente, {angles_prec}")
+    mc.send_angles(angles_prec, int(vitesse))
+
 
 
 
@@ -436,22 +422,19 @@ def allerPositionInitiale(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEOUT
             time.sleep(0.05)
 
         print("Mouvement détecté")
+        derniers_angles = lireAngles(mc)
 
 
        # Surveillance pendant le mouvement
         while mc.is_moving() == 1:
-           print(f"vitesse======{mc.get_servo_speeds()}")
            a = statuts_moteurs(mc)
            a[2]=0 # pour ignoer J3 en panne pour le robot 1
-
-           print("STATUTS :", a)
-           print("PROBLEME :", detection_problemes(a))
 
            if detection_problemes(a):
                Explanation_problemes(a)
                print("Vous avez merdé les loustics")
                Arret_urgence(mc)
-              
+               ReculerPositionPrec(mc, derniers_angles, vitesse)
                return False
            else:
                print("Pas de problème c'est ok la team")
@@ -460,7 +443,7 @@ def allerPositionInitiale(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEOUT
            if time.time() - debut > 0.3:
                if blocage_vitesse_moteur(mc, angle_cible=angles):
                    Arret_urgence(mc)
-                   print(f"caca")
+                   ReculerPositionPrec(mc, derniers_angles, vitesse)
                    return False
 
 
