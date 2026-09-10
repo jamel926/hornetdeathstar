@@ -439,11 +439,100 @@ class FauxClavier:
     def __init__(self, touches):
         self.touches = list(touches)
 
-    def __call__(self):
+    def __call__(self, clavier_actif=None):
         if self.touches:
             return self.touches.pop(0)
         # Securite : sans reponse, on termine plutot que de boucler.
         return "f"
+
+
+class TestLectureClavier(unittest.TestCase):
+    """Les fleches doivent etre reconnues, et aucune frappe ne doit etre perdue."""
+
+    def test_nommer_les_sequences(self):
+        """Les deux formes de sequence d'une fleche doivent donner le meme nom."""
+
+        """
+        ESC [ A en mode normal, ESC O A en mode application :
+        les deux circulent selon le terminal, ne reconnaitre
+        que la premiere rend les fleches muettes.
+        """
+
+        self.assertEqual(calibration_grille.nommerTouche(b"\x1b[A"), "haut")
+        self.assertEqual(calibration_grille.nommerTouche(b"\x1bOA"), "haut")
+        self.assertEqual(calibration_grille.nommerTouche(b"\x1b[D"), "gauche")
+        self.assertEqual(calibration_grille.nommerTouche(b"\x1bOD"), "gauche")
+        self.assertEqual(calibration_grille.nommerTouche(b"\r"), "entree")
+        self.assertEqual(calibration_grille.nommerTouche(b"M"), "m")
+
+    def test_sequence_inconnue_est_signalee(self):
+        """Une sequence non reconnue doit se nommer, pas se faire passer pour echap."""
+
+        """
+        Une fleche mal decodee ne doit surtout pas tomber sur
+        une commande de sortie : c'est ce qui terminait la
+        seance a chaque appui.
+        """
+
+        nom = calibration_grille.nommerTouche(b"\x1b[5~")
+
+        self.assertTrue(nom.startswith("inconnu"))
+        self.assertNotIn(nom, ("f", "fin", "entree"))
+
+    def test_lecture_sur_un_vrai_terminal(self):
+        """Sur un pseudo-terminal, les fleches et les appuis en rafale doivent passer."""
+
+        """
+        Ce test vaut pour les deux pieges corriges : le
+        buffering de sys.stdin, qui avalait la sequence
+        entiere, et le vidage du tampon par setcbreak, qui
+        jetait les touches frappees pendant un mouvement.
+        """
+
+        try:
+            import pty
+
+        except ImportError:
+            self.skipTest("pty indisponible sur cette plateforme")
+
+        maitre, esclave = pty.openpty()
+
+        vrai_stdin = sys.stdin
+        sys.stdin = os.fdopen(esclave, "r")
+
+        try:
+            clavier = calibration_grille.ouvrirClavier()
+
+            if clavier is None:
+                self.skipTest("mode caractere indisponible")
+
+            os.write(maitre, b"\x1b[A")
+            self.assertEqual(calibration_grille.lireTouche(clavier), "haut")
+
+            # Trois appuis d'affilee, comme pendant un mouvement.
+            os.write(maitre, b"\x1b[C\x1b[C\x1b[B")
+
+            suite = [calibration_grille.lireTouche(clavier) for _ in range(3)]
+
+            self.assertEqual(suite, ["droite", "droite", "bas"])
+
+            calibration_grille.fermerClavier(clavier)
+
+        finally:
+            sys.stdin = vrai_stdin
+            os.close(maitre)
+
+    def test_repli_sans_terminal(self):
+        """Sans terminal, la lecture doit retomber sur une ligne tapee."""
+
+        origine = calibration_grille.lireTexte
+        calibration_grille.lireTexte = FauxDialogue(["droite"])
+
+        try:
+            self.assertEqual(calibration_grille.lireTouche(None), "droite")
+
+        finally:
+            calibration_grille.lireTexte = origine
 
 
 class TestArriveeDuMemeCote(unittest.TestCase):

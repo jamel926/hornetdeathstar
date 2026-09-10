@@ -1379,55 +1379,150 @@ def lireTexte(message, defaut=""):
     return reponse if reponse else defaut
 
 
-def lireTouche():
-    """Lit une touche au vol, fleches comprises, et retourne son nom."""
+NOMS_SEQUENCES = {
+    "[A": "haut",   "OA": "haut",
+    "[B": "bas",    "OB": "bas",
+    "[C": "droite", "OC": "droite",
+    "[D": "gauche", "OD": "gauche",
+}
+
+
+def nommerTouche(octets):
+    """Traduit les octets recus du terminal en nom de touche."""
 
     """
-    Le terminal est passe en mode caractere le temps de la
-    lecture : sans cela il faudrait valider chaque appui par
-    entree. Les fleches n'envoient pas un caractere mais une
-    sequence d'echappement de trois octets, d'ou la relecture
-    conditionnelle.
+    Une fleche n'envoie pas un caractere mais une sequence
+    d'echappement de trois octets. Elle prend deux formes
+    selon le mode du terminal : ESC [ A en mode normal,
+    ESC O A en mode application. Les deux circulent, il faut
+    accepter les deux.
+    """
 
-    En l'absence de terminal -- redirection, tuyau, tests --
-    on retombe sur une ligne tapee.
+    if not octets:
+        return "inconnu"
+
+    texte = octets.decode("utf-8", "replace")
+
+    if texte[0] == "\x1b":
+
+        if len(texte) == 1:
+            return "echap"
+
+        return NOMS_SEQUENCES.get(texte[1:3], "inconnu:" + repr(texte[1:]))
+
+    if texte[0] in ("\r", "\n"):
+        return "entree"
+
+    return texte[0].lower()
+
+
+def ouvrirClavier():
+    """Passe le terminal en mode caractere et retourne son reglage precedent, ou None."""
+
+    """
+    Le mode est pris UNE fois pour toute la duree du
+    pointage, pas a chaque touche.
+
+    tty.setcbreak vide le tampon d'entree par defaut
+    (TCSAFLUSH) : appele avant chaque lecture, il jetait
+    toutes les touches frappees pendant que le bras bougeait,
+    et il devenait impossible d'enchainer les deplacements.
+    TCSANOW applique le reglage sans rien jeter, et les appuis
+    faits pendant un mouvement sont traites ensuite.
     """
 
     if not CLAVIER_DIRECT or not sys.stdin.isatty():
+        return None
+
+    descripteur = sys.stdin.fileno()
+
+    try:
+        ancien_mode = termios.tcgetattr(descripteur)
+        tty.setcbreak(descripteur, termios.TCSANOW)
+
+    except Exception as e:
+        print("Mode caractere indisponible, les commandes seront a taper :", e)
+        return None
+
+    return ancien_mode
+
+
+def fermerClavier(ancien_mode):
+    """Rend au terminal son reglage d'origine."""
+
+    if ancien_mode is None:
+        return
+
+    try:
+        termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, ancien_mode)
+
+    except Exception:
+        pass
+
+
+NOMS_SEQUENCES = {
+    "[A": "haut",   "OA": "haut",
+    "[B": "bas",    "OB": "bas",
+    "[C": "droite", "OC": "droite",
+    "[D": "gauche", "OD": "gauche",
+}
+
+
+def nommerTouche(octets):
+    """Traduit les octets recus du terminal en nom de touche."""
+
+    """
+    Une fleche n'envoie pas un caractere mais une sequence
+    d'echappement de trois octets, et elle prend deux formes
+    selon le mode du terminal : ESC [ A en mode normal,
+    ESC O A en mode application. Les deux circulent, il faut
+    accepter les deux.
+    """
+
+    if not octets:
+        return "inconnu"
+
+    texte = octets.decode("utf-8", "replace")
+
+    if texte[0] == "\x1b":
+
+        if len(texte) == 1:
+            return "echap"
+
+        return NOMS_SEQUENCES.get(texte[1:3], "inconnu:" + repr(texte[1:]))
+
+    if texte[0] in ("\r", "\n"):
+        return "entree"
+
+    return texte[0].lower()
+
+
+def lireTouche(clavier_actif=None):
+    """Lit une touche au vol, fleches comprises, et retourne son nom."""
+
+    """
+    La lecture se fait par os.read et NON par sys.stdin.read :
+    sys.stdin est bufferise, il avale les trois octets d'une
+    fleche d'un coup et n'en rend qu'un. Le select qui suit ne
+    voyait alors plus rien sur le descripteur, et la fleche
+    passait pour un echappement seul.
+    """
+
+    if clavier_actif is None:
         return lireTexte("  > ").lower()
 
     descripteur = sys.stdin.fileno()
-    ancien_mode = termios.tcgetattr(descripteur)
 
-    try:
-        tty.setcbreak(descripteur)
+    octets = os.read(descripteur, 1)
 
-        touche = sys.stdin.read(1)
+    if octets == b"\x1b":
 
-        if touche == "\x1b":
+        # Le reste de la sequence suit immediatement, ou bien
+        # c'est la touche echap toute seule.
+        if select.select([descripteur], [], [], 0.05)[0]:
+            octets += os.read(descripteur, 2)
 
-            # Sequence de fleche : deux octets suivent, mais
-            # la touche echap seule n'en envoie aucun.
-            if select.select([sys.stdin], [], [], 0.05)[0]:
-
-                suite = sys.stdin.read(2)
-
-                return {
-                    "[A": "haut",
-                    "[B": "bas",
-                    "[C": "droite",
-                    "[D": "gauche",
-                }.get(suite, "echap")
-
-            return "echap"
-
-    finally:
-        termios.tcsetattr(descripteur, termios.TCSADRAIN, ancien_mode)
-
-    if touche in ("\r", "\n"):
-        return "entree"
-
-    return touche.lower()
+    return nommerTouche(octets)
 
 
 def lireImpact():
@@ -1532,13 +1627,23 @@ def pointageAuClavier(mc, base, j4, j5, j6):
 
     afficherAideClavier(pas)
 
-    pose = lireAngles(mc)
+    clavier = ouvrirClavier()
+
+    try:
+        return boucleClavier(mc, base, j4, j5, j6, pas, clavier)
+
+    finally:
+        fermerClavier(clavier)
+
+
+def boucleClavier(mc, base, j4, j5, j6, pas, clavier):
+    """Boucle de deplacement au clavier, terminal deja en mode caractere."""
 
     while True:
 
         print("  J4 = %+7.2f   J5 = %+7.2f   (pas %.2f)" % (j4, j5, pas))
 
-        touche = lireTouche()
+        touche = lireTouche(clavier)
 
         # -------------------------------------------------
         # Sortie
@@ -1557,7 +1662,7 @@ def pointageAuClavier(mc, base, j4, j5, j6):
         if touche in ("s", "saut"):
             return ("saut", None)
 
-        if touche in ("f", "fin", "echap"):
+        if touche in ("f", "fin"):
             return ("fin", None)
 
         if touche in ("?", "h", "aide"):
@@ -1577,7 +1682,14 @@ def pointageAuClavier(mc, base, j4, j5, j6):
             continue
 
         if touche == "m":
+
+            # Le mode main pose des questions : il faut rendre
+            # le terminal a son fonctionnement normal le temps
+            # des saisies, puis le reprendre.
+            fermerClavier(clavier)
             j4, j5 = pointageMainLibre(mc, base, j4, j5, j6)
+            clavier = ouvrirClavier()
+
             afficherAideClavier(pas)
             continue
 
@@ -1597,7 +1709,12 @@ def pointageAuClavier(mc, base, j4, j5, j6):
         elif touche == "bas":
             cible_j5 = j5 - pas
         else:
-            print("  Touche inconnue. Taper ? pour l'aide.")
+            """
+            On affiche ce que le terminal a envoye : une
+            fleche non reconnue se diagnostique tout de
+            suite, au lieu de passer pour une touche morte.
+            """
+            print("  Touche non reconnue :", touche, "-- taper ? pour l'aide.")
             continue
 
         arrive, mesure = bougerTeteDuMemeCote(mc, base, j4, j5, cible_j4, cible_j5, j6)
