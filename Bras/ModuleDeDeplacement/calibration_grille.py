@@ -171,13 +171,16 @@ aussi l'epaule et le coude, et le bras s'effondrerait.
 SERVOS_TETE = [4, 5]       # J4 et J5
 
 """
-Pose de depart. La valeur de reference est celle de
-PU_PositionInitiale, importee plus haut quand ce module
-est disponible : c'est la source de verite de l'equipe.
-La copie locale ne sert que de repli.
+Pose de depart : celle de PU_PositionInitiale, importee
+plus haut. C'est la source de verite de l'equipe, et elle
+change (J1 est passe de 160 a 10 degres le 10/09).
+
+Volontairement AUCUNE copie de repli. Une valeur figee ici
+serait perimee au premier changement, et un repli silencieux
+enverrait le bras 150 degres a cote en ayant l'air de
+fonctionner. Si le module manque, le script part de la pose
+courante et le dit.
 """
-if ANGLES_POSITION_INITIALE is None:
-    ANGLES_POSITION_INITIALE = [160.0, 50.0, -145.0, 40.0, 0.0, 0.0]
 
 VITESSE_INIT = 40          # int, 1 a 100 : lent, le bras traverse son espace
 TIMEOUT_INIT = 25          # secondes
@@ -1101,6 +1104,13 @@ def allerPositionInitiale(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEOUT
     if angles is None:
         angles = ANGLES_POSITION_INITIALE
 
+    if angles is None:
+        print()
+        print("PU_PositionInitiale est introuvable : la pose de reference est inconnue.")
+        print("Le bras NE sera PAS deplace. La seance part de la pose courante,")
+        print("qui sera relue telle quelle et enregistree dans le modele.")
+        return (False, lireAngles(mc))
+
     print()
     print("Mise en position initiale :", [round(a, 1) for a in angles])
     print("Le bras va traverser son espace de travail.")
@@ -1587,7 +1597,7 @@ def main():
     if base_complete is None:
         return 1
 
-    if not arrive:
+    if not arrive and ANGLES_POSITION_INITIALE is not None:
         print()
         if not lireTexte("Continuer malgre tout ? [o/N] ", "n").lower().startswith("o"):
             return 1

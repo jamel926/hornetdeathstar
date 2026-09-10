@@ -551,10 +551,35 @@ class TestPositionInitiale(unittest.TestCase):
 
         calibration_grille.lireTexte = FauxDialogue(["n"])
 
-        arrive, mesure = calibration_grille.allerPositionInitiale(self.bras)
+        cible = [10.0, 50.0, -145.0, 40.0, 0.0, 0.0]
+
+        arrive, mesure = calibration_grille.allerPositionInitiale(self.bras, cible)
 
         self.assertFalse(arrive)
         self.assertEqual(self.bras.consignes, [])
+
+    def test_pose_de_reference_inconnue(self):
+        """Sans pose de reference, le bras ne doit pas bouger du tout."""
+
+        """
+        Un repli chiffre en dur serait perime au premier
+        changement de l'equipe : J1 est deja passe de 160 a
+        10 degres. Mieux vaut ne pas bouger que bouger vers
+        une pose devinee.
+        """
+
+        origine = calibration_grille.ANGLES_POSITION_INITIALE
+        calibration_grille.ANGLES_POSITION_INITIALE = None
+
+        try:
+            arrive, mesure = calibration_grille.allerPositionInitiale(self.bras)
+
+        finally:
+            calibration_grille.ANGLES_POSITION_INITIALE = origine
+
+        self.assertFalse(arrive)
+        self.assertEqual(self.bras.consignes, [])
+        self.assertIsNotNone(mesure)
 
 
 # =========================================================
