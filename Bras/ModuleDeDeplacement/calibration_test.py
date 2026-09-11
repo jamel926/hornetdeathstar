@@ -38,6 +38,7 @@ reste DEBRANCHE.
 
 import os
 import csv
+import re
 from datetime import datetime
 
 """
@@ -57,7 +58,9 @@ from calibration_grille import (
     allumerPointeur,
     anglesPourPoint,
     approcher,
-    chargerModele,
+    ajusterModele,
+    calculerResidus,
+    chargerMesures,
     connecterRobot,
     dansEnveloppe,
     eteindrePointeur,
@@ -72,6 +75,7 @@ from calibration_grille import (
 # =========================================================
 
 FICHIER_VALIDATION = os.path.join(DOSSIER_RESULTATS, "validation_pointage.csv")
+FICHIER_MESURES = os.path.join(DOSSIER_RESULTATS, "calibration_grille.csv")
 
 ENTETE_VALIDATION = [
     "horodatage", "u_demande_carreaux", "v_demande_carreaux",
@@ -122,7 +126,7 @@ def verifierBase(mc, modele, tolerance=TOLERANCE_BASE):
 # 4. ENREGISTREMENT DES TIRS
 # =========================================================
 
-def enregistrerTir(demande, angles, reel):
+def enregistrerTir(demande, angles, reel, chemin=None):
     """Ajoute une ligne au fichier de validation et retourne True si l'ecriture a reussi."""
 
     if reel is None:
@@ -158,6 +162,164 @@ def enregistrerTir(demande, angles, reel):
     except Exception as e:
         print("Impossible d'enregistrer le tir :", e)
         return False
+
+
+# =========================================================
+# 5. SELECTION DE LA CALIBRATION
+# =========================================================
+
+def nomFichierSecurise(serie):
+    """Transforme le nom d'une serie en nom de fichier sans caracteres dangereux."""
+    propre = re.sub(r"[^A-Za-z0-9._-]+", "_", serie).strip("._")
+    return propre or "calibration"
+
+
+def listerSeriesCalibrations():
+    """Retourne les series presentes dans le CSV, avec quelques statistiques utiles."""
+    series = {}
+
+    try:
+        with open(FICHIER_MESURES, "r", newline="") as fichier:
+            for ligne in csv.DictReader(fichier):
+                serie = (ligne.get("serie") or "").strip()
+                usage = (ligne.get("usage") or "").strip()
+                if not serie:
+                    continue
+
+                if serie not in series:
+                    series[serie] = {
+                        "ajustement": 0,
+                        "validation": 0,
+                        "u_min": None,
+                        "u_max": None,
+                        "v_min": None,
+                        "v_max": None,
+                    }
+
+                info = series[serie]
+                if usage in ("ajustement", "validation"):
+                    info[usage] += 1
+
+                try:
+                    if ligne.get("u_carreaux") and ligne.get("v_carreaux"):
+                        u = float(ligne["u_carreaux"])
+                        v = float(ligne["v_carreaux"])
+                    elif ligne.get("u_cm") and ligne.get("v_cm"):
+                        u = float(ligne["u_cm"]) / COTE_CARREAU
+                        v = float(ligne["v_cm"]) / COTE_CARREAU
+                    else:
+                        continue
+
+                    info["u_min"] = u if info["u_min"] is None else min(info["u_min"], u)
+                    info["u_max"] = u if info["u_max"] is None else max(info["u_max"], u)
+                    info["v_min"] = v if info["v_min"] is None else min(info["v_min"], v)
+                    info["v_max"] = v if info["v_max"] is None else max(info["v_max"], v)
+                except (ValueError, TypeError):
+                    continue
+
+    except FileNotFoundError:
+        print("Fichier de mesures introuvable :", FICHIER_MESURES)
+        return {}
+    except Exception as e:
+        print("Impossible de lire les calibrations :", e)
+        return {}
+
+    return series
+
+
+def chargerBaseSerie(serie):
+    """Lit J1/J2/J3 dans la campagne choisie pour verifier la base du robot."""
+    try:
+        with open(FICHIER_MESURES, "r", newline="") as fichier:
+            for ligne in csv.DictReader(fichier):
+                if (ligne.get("serie") or "").strip() != serie:
+                    continue
+                try:
+                    return [float(ligne["J1"]), float(ligne["J2"]), float(ligne["J3"])]
+                except (ValueError, KeyError):
+                    continue
+    except Exception as e:
+        print("Impossible de lire la base de la calibration :", e)
+
+    return None
+
+
+def construireModeleSerie(serie):
+    """Reconstruit en memoire le modele de la serie choisie a partir du CSV."""
+    ajustement = chargerMesures(usage="ajustement", serie=serie)
+    validation = chargerMesures(usage="validation", serie=serie)
+
+    if len(ajustement) < 5:
+        print("ERREUR : la calibration '%s' ne contient que %d point(s) d'ajustement." %
+              (serie, len(ajustement)))
+        print("Il en faut au moins 5 pour reconstruire le modele.")
+        return None
+
+    base_reference = chargerBaseSerie(serie)
+    modele = ajusterModele(ajustement, base=base_reference)
+
+    if modele is None:
+        print("ERREUR : impossible de reconstruire la calibration '%s'." % serie)
+        return None
+
+    # Le nom de serie est ajoute au modele pour l'affichage et le suivi.
+    modele["serie"] = serie
+
+    if validation:
+        modele["residus_validation"] = calculerResidus(modele, validation)
+
+    return modele
+
+
+def choisirCalibration():
+    """Affiche les calibrations disponibles et retourne la serie choisie."""
+    series = listerSeriesCalibrations()
+
+    if not series:
+        print("Aucune calibration trouvee dans :", FICHIER_MESURES)
+        return None
+
+    noms = list(series.keys())
+
+    print()
+    print("=========================================")
+    print("CHOIX DE LA CALIBRATION")
+    print("=========================================")
+    print("Les calibrations sont selectionnees par leur nom de serie.")
+    print()
+
+    for indice, serie in enumerate(noms, 1):
+        info = series[serie]
+        if info["u_min"] is not None:
+            zone = "u %.1f..%.1f / v %.1f..%.1f carreaux" % (
+                info["u_min"], info["u_max"], info["v_min"], info["v_max"])
+        else:
+            zone = "zone inconnue"
+
+        print("  %d) %s" % (indice, serie))
+        print("     ajustement : %d | validation : %d | %s" %
+              (info["ajustement"], info["validation"], zone))
+
+    print()
+    print("Taper le numero ou le nom exact de la calibration.")
+    print("Taper fin pour quitter.")
+
+    while True:
+        reponse = lireTexte("calibration > ").strip()
+
+        if reponse.lower() in ("fin", "f", "q"):
+            return None
+
+        if reponse.isdigit():
+            indice = int(reponse)
+            if 1 <= indice <= len(noms):
+                return noms[indice - 1]
+
+        for nom in noms:
+            if reponse.lower() == nom.lower():
+                return nom
+
+        print("  Choix invalide. Entrer un numero entre 1 et %d, ou le nom exact." % len(noms))
 
 
 # =========================================================
@@ -235,7 +397,7 @@ def lireImpactReel(demande):
 # =========================================================
 
 def main():
-    """Charge le modele, pointe les points demandes et retourne le code de sortie."""
+    """Demande la calibration, verifie la base, puis pointe les points demandes."""
 
     print("=========================================")
     print("TEST DE LA CALIBRATION")
@@ -243,26 +405,46 @@ def main():
     print()
     print("SECURITE : pointeur rouge classe 2, laser de puissance DEBRANCHE.")
 
-    modele = chargerModele()
+    # ---------------------------------------------------------
+    # Choix de la calibration AVANT tout mouvement du robot.
+    # ---------------------------------------------------------
+    serie = choisirCalibration()
+
+    if serie is None:
+        print("Aucune calibration selectionnee.")
+        return 0
+
+    print()
+    print("Calibration selectionnee :", serie)
+    print("Reconstruction du modele depuis les points de cette serie...")
+
+    modele = construireModeleSerie(serie)
 
     if modele is None:
         return 1
 
     print()
-    print("Modele du", modele.get("date", "?"), "-", modele.get("nb_points", "?"), "points")
+    print("Calibration '%s' chargee : %d points d'ajustement" %
+          (serie, modele.get("nb_points", 0)))
+    print("Zone calibree : u %.1f..%.1f, v %.1f..%.1f carreaux" % (
+        modele["enveloppe"]["u_min"], modele["enveloppe"]["u_max"],
+        modele["enveloppe"]["v_min"], modele["enveloppe"]["v_max"]))
 
     residus = modele.get("residus")
     if residus:
-        print("Erreur annoncee a l'ajustement : rms %.2f carreaux, max %.2f carreaux"
-              % (residus["rms_carreaux"], residus["max_carreaux"]))
+        print("Erreur ajustement : rms %.2f carreaux, max %.2f carreaux" %
+              (residus["rms_carreaux"], residus["max_carreaux"]))
 
     residus_validation = modele.get("residus_validation")
     if residus_validation:
-        print("Erreur en validation croisee   : rms %.2f carreaux, max %.2f carreaux"
-              % (residus_validation["rms_carreaux"], residus_validation["max_carreaux"]))
+        print("Erreur validation  : rms %.2f carreaux, max %.2f carreaux" %
+              (residus_validation["rms_carreaux"], residus_validation["max_carreaux"]))
     else:
-        print("Pas de validation croisee dans ce modele : l'erreur reelle n'est pas verifiee.")
+        print("Pas de validation pour cette calibration.")
 
+    # ---------------------------------------------------------
+    # Connexion au robot seulement apres le choix de calibration.
+    # ---------------------------------------------------------
     mc = connecterRobot()
 
     if mc is None:
@@ -272,8 +454,22 @@ def main():
         return 1
 
     angles = lireAngles(mc)
+
+    if angles is None:
+        print("Lecture des angles impossible.")
+        return 1
+
     base = angles[0:3]
     j6 = angles[5]
+
+    fichier_validation = os.path.join(
+        DOSSIER_RESULTATS,
+        "validation_pointage_%s.csv" % nomFichierSecurise(serie),
+    )
+
+    print()
+    print("Les tirs de cette session seront enregistres dans :")
+    print(" ", fichier_validation)
 
     try:
         if not allumerPointeur(mc):
@@ -288,7 +484,24 @@ def main():
 
             u, v = demande
 
+            # -------------------------------------------------
+            # Verification explicite de l'enveloppe choisie.
+            # -------------------------------------------------
+            if not dansEnveloppe(modele, u, v):
+                e = modele["enveloppe"]
+                print("  Point hors de la zone de la calibration '%s'." % serie)
+                print("  Zone autorisee : u %.1f..%.1f, v %.1f..%.1f carreaux."
+                      % (e["u_min"], e["u_max"], e["v_min"], e["v_max"]))
+                print("  Si ce point appartient a une autre zone, relancer le programme")
+                print("  et choisir la calibration correspondante.")
+                continue
+
             resultat = anglesPourPoint(modele, u, v)
+
+            if resultat is None:
+                print("  Impossible de calculer J4/J5 pour ce point avec cette calibration.")
+                print("  Le point est peut-etre hors du domaine angulaire inverse.")
+                continue
 
             j4, j5 = resultat
 
@@ -307,14 +520,6 @@ def main():
             # Ecart de reproduction
             # -------------------------------------------------
 
-            """
-            Les angles reellement atteints ne sont pas
-            exactement ceux commandes. On affiche ou le
-            modele dit que le spot est tombe compte tenu de
-            cet ecart : c'est la part mecanique de l'erreur,
-            distincte de l'erreur du modele.
-            """
-
             prediction = predireImpact(modele, mesure[3], mesure[4])
 
             if prediction is not None:
@@ -325,14 +530,20 @@ def main():
 
             reel = lireImpactReel(demande)
 
-            enregistrerTir(demande, (mesure[3], mesure[4]), reel)
+            enregistrerTir(
+                demande,
+                (mesure[3], mesure[4]),
+                reel,
+                chemin=fichier_validation,
+            )
 
     finally:
 
         eteindrePointeur(mc)
         print()
         print("Pointeur eteint. Moteurs laisses sous tension.")
-        print("Tirs enregistres dans :", FICHIER_VALIDATION)
+        print("Calibration utilisee :", serie)
+        print("Tirs enregistres dans :", fichier_validation)
 
     return 0
 
