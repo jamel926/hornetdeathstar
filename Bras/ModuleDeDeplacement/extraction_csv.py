@@ -1,7 +1,23 @@
 import pandas as pd
+from PU_PositionVisee2 import aller_en_position_visee
+from PU_PositionInitiale import (
+    connecterRobot,
+    lireAngles,
+    verifierAngles,
+    allerPositionInitiale,
+    estEnPositionInitiale,
+    ANGLES_POSITION_INITIALE,
+    NOMS_ARTICULATIONS,
+    VITESSE_INIT,
+    TIMEOUT_INIT,
+    ecartMaximal,
+    TOLERANCE_ANGLE,
+    PORT,
+    BAUDRATE
+)
 
 # Chargement du fichier
-df = pd.read_csv("calibration_grille.csv")
+df = pd.read_csv("/home/er/Documents/projet_imersif/hornetdeathstar/Bras/ModuleDeDeplacement/resultats/calibration_grille.csv")
 
 print("Choisir la calibration à tester :")
 print("1 - Calib 1")
@@ -27,6 +43,9 @@ print(f"\n{len(df)} points trouvés pour {calibration}")
 
 resultats = []
 
+mc = connecterRobot()
+TIMEOUT_INIT = 15  
+
 for _, row in df.iterrows():
 
     cible_u = row["u_cm"]
@@ -39,8 +58,16 @@ for _, row in df.iterrows():
     print(f"Cible : ({cible_u}, {cible_v})")
     print(f"Angles : J4={j4:.2f}  J5={j5:.2f}")
 
-    # A remplacer par votre fonction robot
-    # robot.move(j4, j5)
+    angles = [
+    0.0,      # J1 - rotation de la base
+    50.0,     # J2 - epaule
+    -145.0,   # J3 - coude
+    j4,     # J4 - poignet
+    j5,      # J5 - inclinaison de l'outil
+    0.0       # J6 - rotation finale de l'outil
+    ]
+
+    aller_en_position_visee(mc, angles,50, TIMEOUT_INIT)
 
     input("Appuyez sur Entrée lorsque le robot est en position...")
 
