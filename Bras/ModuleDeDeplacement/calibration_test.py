@@ -229,20 +229,6 @@ def lireImpactReel(demande):
     return reel
 
 
-def afficherRefus(modele, u, v):
-    """Explique pourquoi un point est refuse par le modele."""
-
-    if not dansEnveloppe(modele, u, v, MARGE_ENVELOPPE):
-        e = modele["enveloppe"]
-        print("  REFUS : point hors de la zone calibree.")
-        print("  Zone relevee : u de %.1f a %.1f carreaux, v de %.1f a %.1f carreaux (marge %.1f carreaux)."
-              % (e["u_min"], e["u_max"], e["v_min"], e["v_max"], MARGE_ENVELOPPE))
-        print("  Le modele n'extrapole pas : il faut etendre la calibration.")
-        return
-
-    print("  REFUS : les angles calcules sortent des limites du bras")
-    print("  (J4 de %.0f a %.0f, J5 de %.0f a %.0f degres)." % (J4_MIN, J4_MAX, J5_MIN, J5_MAX))
-
 
 # =========================================================
 # 6. PROGRAMME
@@ -303,10 +289,6 @@ def main():
             u, v = demande
 
             resultat = anglesPourPoint(modele, u, v)
-
-            if resultat is None:
-                afficherRefus(modele, u, v)
-                continue
 
             j4, j5 = resultat
 

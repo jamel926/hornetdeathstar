@@ -218,14 +218,14 @@ fonctionner. Si le module manque, le script part de la pose
 courante et le dit.
 """
 
-VITESSE_INIT = 40          # int, 1 a 100 : lent, le bras traverse son espace
+VITESSE_INIT = 100          # int, 1 a 100 : lent, le bras traverse son espace
 TIMEOUT_INIT = 25          # secondes
 
 # Retour visuel sur la LED de la carte Atom.
 COULEUR_MAIN = (0, 255, 0)        # vert : la tete est libre
 COULEUR_VERROUILLE = (255, 80, 0) # orange : la tete est tenue par les moteurs
 
-VITESSE_TETE = 20          # int, 1 a 100 (impose par pymycobot)
+VITESSE_TETE = 100          # int, 1 a 100 (impose par pymycobot)
 TIMEOUT_TETE = 10          # secondes
 TOLERANCE_TETE = 2.0       # degres
 PERIODE_SCRUTATION = 0.2   # secondes
