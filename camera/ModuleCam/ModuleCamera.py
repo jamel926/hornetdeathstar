@@ -1,5 +1,5 @@
 import time
-import datetime
+from datetime import datetime
 import cv2
 
 class LaCamera:
@@ -15,6 +15,12 @@ class LaCamera:
         """Read and return ``(success, frame)`` from the camera."""
         return self.camera.read()
 
+    def read_latest(self, max_skip=2):
+        for _ in range(max_skip):
+            if not self.camera.grab():
+                break
+        return self.camera.retrieve()
+    
     def release(self):
         """Release the underlying OpenCV camera handle."""
         self.camera.release()
@@ -24,6 +30,10 @@ class LaCamera:
         """Vérifie si l'utilisateur a appuyé sur la touche 'q' pour quitter l'affichage du flux vidéo en direct. Si la touche 'q' est pressée, cela signifie que l'utilisateur souhaite quitter, sinon le flux vidéo continue d'être affiché."""
         return (cv2.waitKey(1) & 0xFF) in (ord('q'), ord('Q'))
 
+    def Screener(self):
+        """Vérifie si l'utilisateur a appuyé sur la touche 'space' pour screnner l'affichage du flux vidéo en direct. Si la touche 'space' est pressée, cela signifie que l'utilisateur souhaite capturer, sinon le flux vidéo continue d'être affiché."""
+        return (cv2.waitKey(1) & 0xFF) == ord(' ')
+    
     def enregistrerImage(self, frame):
         """Enregistre une image capturée depuis le flux vidéo."""
         import os
@@ -72,6 +82,25 @@ class LaCamera:
         self.camera.release()
         cv2.destroyAllWindows()
 
+    def capturerImageDirect(self):
+        """Affiche le flux vidéo en direct de la caméra. Appuyez sur 'q' pour quitter."""
+        if self.etatConnexionCamera():
+            return
+        while(True):
+            ret,frame = self.camera.read()
+
+            if self.flagCaptureImage(ret):
+                break
+            cv2.imshow('Image en direct',frame)
+
+            if self.Screener():
+                self.enregistrerImage(frame)
+
+            if self.quitterAffichage():
+                break
+        self.camera.release()
+        cv2.destroyAllWindows()
+
     def capturerImage(self):
         """Capture une image de la caméra et l'affiche. Appuyez sur 'q' pour quitter."""
         if self.etatConnexionCamera():
@@ -97,5 +126,5 @@ class LaCamera:
         return(width,height)
 
 if __name__ == "__main__":
-    camera = LaCamera(camera_index=0)
-    camera.afficherLive()
+    camera = LaCamera(camera_index=1)
+    camera.capturerImageDirect()
