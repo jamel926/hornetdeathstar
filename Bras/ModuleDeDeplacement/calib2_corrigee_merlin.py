@@ -21,6 +21,7 @@ Principe :
 7. Le temps de deplacement est mesure.
 8. Le laser reste ETEINT pendant le mouvement.
 9. Si le robot atteint correctement la position,
+
    le laser est allume.
 10. L'utilisateur mesure alors la position reelle du spot.
 11. Le laser est eteint avant le deplacement suivant.

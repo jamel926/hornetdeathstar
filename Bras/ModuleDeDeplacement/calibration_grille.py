@@ -1479,60 +1479,143 @@ def approcher(mc, base, j4, j5, j6):
     return bougerTete(mc, base, j4, j5, j6)
 
 
-def viserAngles(mc, base, j4, j5, j6, tolerance=TOLERANCE_POINTAGE, passes=CORRECTIONS_MAX):
-    """Amene la tete aux angles demandes et rattrape l'ecart de repos, puis retourne (vise, pose atteinte)."""
-
+def viserAngles(
+    mc,
+    base,
+    j4,
+    j5,
+    j6,
+    tolerance=TOLERANCE_POINTAGE,
+    passes=1
+):
     """
-    approcher() envoie une consigne et accepte la pose ou le
-    bras s'immobilise, meme si elle est a deux degres. Ici on
-    vise l'angle, pas la consigne : tant que la pose relevee
-    n'est pas sur l'angle demande, on rallonge la consigne de
-    ce qui manque et on y retourne.
+    Amene la tete directement aux angles demandes.
 
-    Chaque passe repasse par approcher(), donc par le recul :
-    l'arrivee se fait toujours du meme cote, y compris quand
-    la correction fait redescendre la consigne. Sans cela le
-    rattrapage attaquerait le jeu des reducteurs par l'autre
-    face et rendrait la pose non reproductible -- ce que toute
-    la calibration cherche justement a eviter.
+    Cette version effectue UN SEUL mouvement :
+        consigne J4/J5 -> approcher() -> lecture de la pose
 
-    La consigne corrigee peut sortir des limites constructeur
-    au bord de la course : on la borne, et la fonction rend
-    alors False sans insister.
+    Il n'y a pas de rattrapage apres le mouvement.
+
+    La compensation des erreurs mecaniques doit etre faite
+    en amont, par le modele de correction X/Y.
+
+    Retourne :
+        (True, pose)  si les angles atteints sont dans la tolerance
+        (False, pose) sinon
+        (False, None) si le mouvement ou la lecture echoue
     """
 
-    consigne_j4, consigne_j5 = j4, j5
+    # ---------------------------------------------------------
+    # 1. Limitation aux bornes mecaniques
+    # ---------------------------------------------------------
 
-    arrive, pose = approcher(mc, base, consigne_j4, consigne_j5, j6)
+    consigne_j4 = min(
+        max(j4, J4_MIN),
+        J4_MAX
+    )
 
-    for _ in range(passes):
+    consigne_j5 = min(
+        max(j5, J5_MIN),
+        J5_MAX
+    )
 
-        if pose is None:
-            return (False, None)
+    # Si la correction demandee depasse les limites,
+    # on refuse plutot que de modifier silencieusement
+    # fortement la cible.
+    if consigne_j4 != j4:
+        print(
+            "ATTENTION : J4 demande %.2f deg hors limites "
+            "[%.2f ; %.2f]."
+            % (
+                j4,
+                J4_MIN,
+                J4_MAX
+            )
+        )
 
-        ecart_j4 = j4 - pose[3]
-        ecart_j5 = j5 - pose[4]
+        return (
+            False,
+            None
+        )
 
-        if max(abs(ecart_j4), abs(ecart_j5)) <= tolerance:
-            return (True, pose)
+    if consigne_j5 != j5:
+        print(
+            "ATTENTION : J5 demande %.2f deg hors limites "
+            "[%.2f ; %.2f]."
+            % (
+                j5,
+                J5_MIN,
+                J5_MAX
+            )
+        )
 
-        corrigee_j4 = min(max(consigne_j4 + ecart_j4, J4_MIN), J4_MAX)
-        corrigee_j5 = min(max(consigne_j5 + ecart_j5, J5_MIN), J5_MAX)
+        return (
+            False,
+            None
+        )
 
-        # Consigne deja en butee : insister ne changerait plus rien.
-        if (corrigee_j4, corrigee_j5) == (consigne_j4, consigne_j5):
-            return (False, pose)
+    # ---------------------------------------------------------
+    # 2. Un SEUL mouvement
+    # ---------------------------------------------------------
 
-        consigne_j4, consigne_j5 = corrigee_j4, corrigee_j5
+    arrive, pose = approcher(
+        mc,
+        base,
+        consigne_j4,
+        consigne_j5,
+        j6
+    )
 
-        arrive, pose = approcher(mc, base, consigne_j4, consigne_j5, j6)
+    # ---------------------------------------------------------
+    # 3. Echec de mouvement / lecture
+    # ---------------------------------------------------------
 
     if pose is None:
-        return (False, None)
+        return (
+            False,
+            None
+        )
 
-    reste = max(abs(j4 - pose[3]), abs(j5 - pose[4]))
+    # ---------------------------------------------------------
+    # 4. Mesure de l'erreur angulaire finale
+    # ---------------------------------------------------------
 
-    return (reste <= tolerance, pose)
+    ecart_j4 = (
+        j4 - pose[3]
+    )
+
+    ecart_j5 = (
+        j5 - pose[4]
+    )
+
+    erreur_angulaire = max(
+        abs(ecart_j4),
+        abs(ecart_j5)
+    )
+
+    # ---------------------------------------------------------
+    # 5. Verification de la tolerance
+    # ---------------------------------------------------------
+
+    vise = (
+        erreur_angulaire <= tolerance
+    )
+
+    if not vise:
+
+        print(
+            "  Position finale hors tolerance : "
+            "dJ4 = %+.3f deg, dJ5 = %+.3f deg"
+            % (
+                ecart_j4,
+                ecart_j5
+            )
+        )
+
+    return (
+        vise,
+        pose
+    )
 
 
 def bougerTeteDuMemeCote(mc, base, courant_j4, courant_j5, cible_j4, cible_j5, j6):
