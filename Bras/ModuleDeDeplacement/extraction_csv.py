@@ -16,6 +16,29 @@ from PU_PositionInitiale import (
     BAUDRATE
 )
 
+
+
+from calibration_grille import (
+    COTE_CARREAU,
+    DOSSIER_RESULTATS,
+    J4_MIN, J4_MAX, J5_MIN, J5_MAX,
+    MARGE_ENVELOPPE,
+    TOLERANCE_BASE,
+    allumerPointeur,
+    anglesPourPoint,
+    approcher,
+    ajusterModele,
+    calculerResidus,
+    chargerMesures,
+    connecterRobot,
+    dansEnveloppe,
+    eteindrePointeur,
+    lireAngles,
+    lireTexte,
+    predireImpact,
+)
+
+
 # Chargement du fichier
 df = pd.read_csv("/home/er/Documents/projet_imersif/hornetdeathstar/Bras/ModuleDeDeplacement/resultats/calibration_grille.csv")
 
@@ -45,6 +68,9 @@ resultats = []
 
 mc = connecterRobot()
 TIMEOUT_INIT = 15  
+
+allumerPointeur(mc)
+
 
 for _, row in df.iterrows():
 
@@ -100,3 +126,5 @@ resultats_df.to_csv(nom_fichier, index=False)
 print("\nRésumé")
 print(f"Taux de réussite : {100*resultats_df['OK'].mean():.1f}%")
 print(f"Fichier enregistré : {nom_fichier}")
+
+eteindrePointeur()
