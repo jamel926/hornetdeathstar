@@ -484,6 +484,32 @@ def main():
     print("Les tirs de cette session seront enregistres dans :")
     print(" ", fichier_validation)
 
+    # ---------------------------------------------------------
+    # Correction apprise, s'il y en a une.
+    # ---------------------------------------------------------
+
+    """
+    L'import est fait ici, et pas en tete de fichier, parce
+    que apprentissage_correction importe ce module : un
+    import au chargement serait circulaire.
+    """
+
+    from apprentissage_correction import chargerCorrection, cibleCorrigee
+
+    correction = chargerCorrection()
+
+    if correction is None:
+        print()
+        print("Pas de correction apprise : le modele est utilise tel quel.")
+
+    else:
+        print()
+        print("Correction apprise '%s' appliquee (%s, %d points)."
+              % (correction.get("type", "?"), correction.get("serie", "serie inconnue"),
+                 correction.get("nb_points", 0)))
+        print("Pour viser sans elle, renommer", os.path.basename(
+            os.path.join(DOSSIER_RESULTATS, "correction_pointage.json")))
+
     try:
         if not allumerPointeur(mc):
             print("Le pointeur ne s'allume pas.")
@@ -509,7 +535,14 @@ def main():
                 print("  et choisir la calibration correspondante.")
                 continue
 
-            resultat = anglesPourPoint(modele, u, v)
+            # La correction deplace la cible donnee au modele ;
+            # le modele lui-meme n'est pas touche.
+            vise_u, vise_v = cibleCorrigee(correction, u, v)
+
+            if (vise_u, vise_v) != (u, v):
+                print("  Cible corrigee : (%.2f, %.2f) carreaux" % (vise_u, vise_v))
+
+            resultat = anglesPourPoint(modele, vise_u, vise_v)
 
             if resultat is None:
                 print("  Impossible de calculer J4/J5 pour ce point avec cette calibration.")
@@ -539,7 +572,9 @@ def main():
             prediction = predireImpact(modele, mesure[3], mesure[4])
 
             if prediction is not None:
-                derive = ((prediction[0] - u) ** 2 + (prediction[1] - v) ** 2) ** 0.5
+                # Comparer a la cible REELLEMENT donnee au modele :
+                # sinon la correction se lirait comme une derive.
+                derive = ((prediction[0] - vise_u) ** 2 + (prediction[1] - vise_v) ** 2) ** 0.5
                 if derive > 0.1:
                     print("  Angles atteints : J4 = %+.2f  J5 = %+.2f  -> %.2f carreaux de derive mecanique"
                           % (mesure[3], mesure[4], derive))
