@@ -6,15 +6,34 @@ TEST DE LA CALIBRATION - POINTER UN POINT DEMANDE
 Objectif :
 ---------
 Verifier la calibration produite par calibration_grille.py :
-on donne des coordonnees X et Y sur le quadrillage, le robot
-pointe dessus.
+on donne des coordonnees X et Y sur le quadrillage,
+le robot pointe dessus.
 
 Le script sert aussi d'outil de MESURE : apres chaque tir,
 on peut saisir l'endroit ou le spot est reellement tombe.
-L'ecart est enregistre.
+L'ecart est enregistre, et c'est ce chiffre qui dit ce
+que vaut la calibration.
 
-A la fin de la session, lorsque l'utilisateur tape "fin",
-deux courbes 3D sont affichees :
+Pourquoi la base est verifiee au demarrage :
+-------------------------------------------
+Le modele decrit la position du spot pour une pose de base
+donnee. Si J1, J2 ou J3 ont bouge depuis la calibration,
+tout le modele est faux. Le script refuse alors de
+continuer plutot que de viser a cote sans le dire.
+
+Pourquoi le tir corrige sa propre consigne :
+--------------------------------------------
+Le bras ne s'arrete pas sur la consigne, mais un peu en
+dessous. Le tir passe donc par viserAngles(), qui relit
+la pose atteinte et rallonge la consigne tant que l'angle
+demande n'est pas tenu. L'ecart residuel affiche apres
+chaque tir ne vient plus de la mecanique : c'est celui
+du modele.
+
+Graphiques en fin de session :
+------------------------------
+Lorsque l'utilisateur tape "fin", deux courbes 3D sont
+affichees :
 
     1) X visee, Y visee, erreur X
        erreur X = X mesuree - X visee
@@ -22,12 +41,16 @@ deux courbes 3D sont affichees :
     2) X visee, Y visee, erreur Y
        erreur Y = Y mesuree - Y visee
 
-Les coordonnees X et Y sont exprimees en CARREAUX.
+Toutes les coordonnees sont exprimees en CARREAUX.
+
+Utilisation :
+------------
+    python3 calibration_test.py
 
 ATTENTION :
 ----------
-Pointeur rouge classe 2 uniquement.
-Le laser de puissance reste DEBRANCHE.
+Pointeur rouge classe 2 uniquement. Le laser de puissance
+reste DEBRANCHE.
 """
 
 
@@ -42,27 +65,24 @@ from datetime import datetime
 
 import matplotlib.pyplot as plt
 
-
 """
 Les fonctions du modele et la couche robot viennent du
 script de calibration, qui est dans le meme dossier. Son
-code executable est sous if __name__ == "__main__" :
-cet import n'ouvre donc aucun port serie et ne declenche
+code executable est sous if __name__ == "__main__" : cet
+import n'ouvre donc aucun port serie et ne declenche
 aucun mouvement.
 """
 
 from calibration_grille import (
     COTE_CARREAU,
     DOSSIER_RESULTATS,
-    J4_MIN,
-    J4_MAX,
-    J5_MIN,
-    J5_MAX,
+    J4_MIN, J4_MAX, J5_MIN, J5_MAX,
     MARGE_ENVELOPPE,
     TOLERANCE_BASE,
+    TOLERANCE_POINTAGE,
     allumerPointeur,
     anglesPourPoint,
-    approcher,
+    viserAngles,
     ajusterModele,
     calculerResidus,
     chargerMesures,
@@ -197,16 +217,23 @@ def enregistrerTir(demande, angles, reel, chemin=None):
     try:
         os.makedirs(DOSSIER_RESULTATS, exist_ok=True)
 
-        # Utiliser le chemin fourni si disponible.
-        fichier_cible = chemin if chemin is not None else FICHIER_VALIDATION
+        # Utiliser le fichier fourni par l'appelant si disponible.
+        fichier_cible = (
+            chemin
+            if chemin is not None
+            else FICHIER_VALIDATION
+        )
 
         nouveau = not os.path.exists(fichier_cible)
 
         with open(fichier_cible, "a", newline="") as fichier:
+
             redacteur = csv.writer(fichier)
 
             if nouveau:
-                redacteur.writerow(ENTETE_VALIDATION)
+                redacteur.writerow(
+                    ENTETE_VALIDATION
+                )
 
             redacteur.writerow([
                 datetime.now().isoformat(timespec="seconds"),
@@ -222,7 +249,10 @@ def enregistrerTir(demande, angles, reel, chemin=None):
         return True
 
     except Exception as e:
-        print("Impossible d'enregistrer le tir :", e)
+        print(
+            "Impossible d'enregistrer le tir :",
+            e
+        )
         return False
 
 
@@ -250,21 +280,29 @@ def listerSeriesCalibrations():
     Retourne les series presentes dans le CSV,
     avec quelques statistiques utiles.
 
-    ATTENTION :
-    Le fichier calibration_grille.csv utilise encore les champs
-    internes u/v. Ils sont uniquement utilises ici pour lire
-    les anciennes donnees de calibration.
+    Le fichier calibration_grille.csv conserve ses champs
+    internes u/v. Dans ce programme, ils sont traduits en
+    x/y pour l'affichage et l'utilisation utilisateur.
     """
 
     series = {}
 
     try:
-        with open(FICHIER_MESURES, "r", newline="") as fichier:
+        with open(
+            FICHIER_MESURES,
+            "r",
+            newline=""
+        ) as fichier:
 
             for ligne in csv.DictReader(fichier):
 
-                serie = (ligne.get("serie") or "").strip()
-                usage = (ligne.get("usage") or "").strip()
+                serie = (
+                    ligne.get("serie") or ""
+                ).strip()
+
+                usage = (
+                    ligne.get("usage") or ""
+                ).strip()
 
                 if not serie:
                     continue
@@ -281,21 +319,43 @@ def listerSeriesCalibrations():
 
                 info = series[serie]
 
-                if usage in ("ajustement", "validation"):
+                if usage in (
+                    "ajustement",
+                    "validation"
+                ):
                     info[usage] += 1
 
                 try:
-                    # Lecture des anciennes donnees de calibration.
-                    # Elles restent en u/v dans calibration_grille.py.
-                    if ligne.get("u_carreaux") and ligne.get("v_carreaux"):
 
-                        x = float(ligne["u_carreaux"])
-                        y = float(ligne["v_carreaux"])
+                    # Les donnees du fichier de calibration
+                    # utilisent encore u/v.
+                    if (
+                        ligne.get("u_carreaux")
+                        and ligne.get("v_carreaux")
+                    ):
 
-                    elif ligne.get("u_cm") and ligne.get("v_cm"):
+                        x = float(
+                            ligne["u_carreaux"]
+                        )
 
-                        x = float(ligne["u_cm"]) / COTE_CARREAU
-                        y = float(ligne["v_cm"]) / COTE_CARREAU
+                        y = float(
+                            ligne["v_carreaux"]
+                        )
+
+                    elif (
+                        ligne.get("u_cm")
+                        and ligne.get("v_cm")
+                    ):
+
+                        x = (
+                            float(ligne["u_cm"])
+                            / COTE_CARREAU
+                        )
+
+                        y = (
+                            float(ligne["v_cm"])
+                            / COTE_CARREAU
+                        )
 
                     else:
                         continue
@@ -324,15 +384,28 @@ def listerSeriesCalibrations():
                         else max(info["y_max"], y)
                     )
 
-                except (ValueError, TypeError):
+                except (
+                    ValueError,
+                    TypeError
+                ):
                     continue
 
     except FileNotFoundError:
-        print("Fichier de mesures introuvable :", FICHIER_MESURES)
+
+        print(
+            "Fichier de mesures introuvable :",
+            FICHIER_MESURES
+        )
+
         return {}
 
     except Exception as e:
-        print("Impossible de lire les calibrations :", e)
+
+        print(
+            "Impossible de lire les calibrations :",
+            e
+        )
+
         return {}
 
     return series
@@ -345,24 +418,35 @@ def chargerBaseSerie(serie):
     """
 
     try:
-        with open(FICHIER_MESURES, "r", newline="") as fichier:
+        with open(
+            FICHIER_MESURES,
+            "r",
+            newline=""
+        ) as fichier:
 
             for ligne in csv.DictReader(fichier):
 
-                if (ligne.get("serie") or "").strip() != serie:
+                if (
+                    ligne.get("serie") or ""
+                ).strip() != serie:
                     continue
 
                 try:
+
                     return [
                         float(ligne["J1"]),
                         float(ligne["J2"]),
-                        float(ligne["J3"])
+                        float(ligne["J3"]),
                     ]
 
-                except (ValueError, KeyError):
+                except (
+                    ValueError,
+                    KeyError
+                ):
                     continue
 
     except Exception as e:
+
         print(
             "Impossible de lire la base de la calibration :",
             e
@@ -388,9 +472,14 @@ def construireModeleSerie(serie):
     )
 
     if len(ajustement) < 5:
+
         print(
-            "ERREUR : la calibration '%s' ne contient que %d point(s) d'ajustement."
-            % (serie, len(ajustement))
+            "ERREUR : la calibration '%s' ne contient "
+            "que %d point(s) d'ajustement."
+            % (
+                serie,
+                len(ajustement)
+            )
         )
 
         print(
@@ -399,7 +488,9 @@ def construireModeleSerie(serie):
 
         return None
 
-    base_reference = chargerBaseSerie(serie)
+    base_reference = chargerBaseSerie(
+        serie
+    )
 
     modele = ajusterModele(
         ajustement,
@@ -407,8 +498,10 @@ def construireModeleSerie(serie):
     )
 
     if modele is None:
+
         print(
-            "ERREUR : impossible de reconstruire la calibration '%s'."
+            "ERREUR : impossible de reconstruire "
+            "la calibration '%s'."
             % serie
         )
 
@@ -417,9 +510,12 @@ def construireModeleSerie(serie):
     modele["serie"] = serie
 
     if validation:
-        modele["residus_validation"] = calculerResidus(
-            modele,
-            validation
+
+        modele["residus_validation"] = (
+            calculerResidus(
+                modele,
+                validation
+            )
         )
 
     return modele
@@ -434,24 +530,32 @@ def choisirCalibration():
     series = listerSeriesCalibrations()
 
     if not series:
+
         print(
             "Aucune calibration trouvee dans :",
             FICHIER_MESURES
         )
+
         return None
 
-    noms = list(series.keys())
+    noms = list(
+        series.keys()
+    )
 
     print()
     print("=========================================")
     print("CHOIX DE LA CALIBRATION")
     print("=========================================")
     print(
-        "Les calibrations sont selectionnees par leur nom de serie."
+        "Les calibrations sont selectionnees "
+        "par leur nom de serie."
     )
     print()
 
-    for indice, serie in enumerate(noms, 1):
+    for indice, serie in enumerate(
+        noms,
+        1
+    ):
 
         info = series[serie]
 
@@ -472,7 +576,10 @@ def choisirCalibration():
 
         print(
             "  %d) %s"
-            % (indice, serie)
+            % (
+                indice,
+                serie
+            )
         )
 
         print(
@@ -488,7 +595,9 @@ def choisirCalibration():
     print(
         "Taper le numero ou le nom exact de la calibration."
     )
-    print("Taper fin pour quitter.")
+    print(
+        "Taper fin pour quitter."
+    )
 
     while True:
 
@@ -496,24 +605,37 @@ def choisirCalibration():
             "calibration > "
         ).strip()
 
-        if reponse.lower() in ("fin", "f", "q"):
+        if reponse.lower() in (
+            "fin",
+            "f",
+            "q"
+        ):
             return None
 
         if reponse.isdigit():
 
-            indice = int(reponse)
+            indice = int(
+                reponse
+            )
 
-            if 1 <= indice <= len(noms):
-                return noms[indice - 1]
+            if (
+                1 <= indice <= len(noms)
+            ):
+                return noms[
+                    indice - 1
+                ]
 
         for nom in noms:
 
-            if reponse.lower() == nom.lower():
+            if (
+                reponse.lower()
+                == nom.lower()
+            ):
                 return nom
 
         print(
-            "  Choix invalide. Entrer un numero entre 1 et %d, "
-            "ou le nom exact."
+            "  Choix invalide. Entrer un numero "
+            "entre 1 et %d, ou le nom exact."
             % len(noms)
         )
 
@@ -524,8 +646,8 @@ def choisirCalibration():
 
 def lireCible():
     """
-    Lit le point a viser en carreaux et le retourne,
-    ou None pour terminer.
+    Lit le point a viser en CARREAUX
+    et le retourne, ou None pour terminer.
 
     Format :
         x y
@@ -539,7 +661,10 @@ def lireCible():
         "Point a viser : deux nombres en CARREAUX "
         "(ex : 4 -2)."
     )
-    print("Taper fin pour terminer.")
+
+    print(
+        "Taper fin pour terminer."
+    )
 
     while True:
 
@@ -547,33 +672,54 @@ def lireCible():
             "cible > "
         )
 
-        if reponse.lower() in ("fin", "f", "q"):
+        if reponse.lower() in (
+            "fin",
+            "f",
+            "q"
+        ):
             return None
 
-        morceaux = reponse.replace(",", " ").split()
+        morceaux = (
+            reponse
+            .replace(",", " ")
+            .split()
+        )
 
         if len(morceaux) != 2:
+
             print(
-                "  Il faut deux nombres separes par un espace."
+                "  Il faut deux nombres "
+                "separes par un espace."
             )
+
             continue
 
         try:
 
-            x = float(morceaux[0])
-            y = float(morceaux[1])
+            x = float(
+                morceaux[0]
+            )
 
-            return (x, y)
+            y = float(
+                morceaux[1]
+            )
+
+            return (
+                x,
+                y
+            )
 
         except ValueError:
 
-            print("  Saisie illisible.")
+            print(
+                "  Saisie illisible."
+            )
 
 
 def lireImpactReel(demande):
     """
     Demande ou le spot est reellement tombe,
-    en carreaux.
+    en CARREAUX.
 
     Retourne :
         (x_reel, y_reel)
@@ -596,20 +742,36 @@ def lireImpactReel(demande):
     if not reponse:
         return None
 
-    morceaux = reponse.replace(",", " ").split()
+    morceaux = (
+        reponse
+        .replace(",", " ")
+        .split()
+    )
 
     if len(morceaux) != 2:
-        print("  Saisie ignoree.")
+
+        print(
+            "  Saisie ignoree."
+        )
+
         return None
 
     try:
 
-        x_reel = float(morceaux[0])
-        y_reel = float(morceaux[1])
+        x_reel = float(
+            morceaux[0]
+        )
+
+        y_reel = float(
+            morceaux[1]
+        )
 
     except ValueError:
 
-        print("  Saisie ignoree.")
+        print(
+            "  Saisie ignoree."
+        )
+
         return None
 
     ecart = (
@@ -627,7 +789,10 @@ def lireImpactReel(demande):
         )
     )
 
-    return (x_reel, y_reel)
+    return (
+        x_reel,
+        y_reel
+    )
 
 
 # =========================================================
@@ -638,28 +803,34 @@ def tracerErreurs3D(donnees):
     """
     Trace deux courbes 3D dans deux sous-graphiques.
 
-    Subplot 1 :
-        X = X visee
-        Y = Y visee
-        Z = erreur X
-            = X mesuree - X visee
+    SUBPLOT 1 :
+        abscisse = X visee
+        profondeur = Y visee
+        hauteur = erreur X
 
-    Subplot 2 :
-        X = X visee
-        Y = Y visee
-        Z = erreur Y
-            = Y mesuree - Y visee
+        erreur X = X mesuree - X visee
+
+    SUBPLOT 2 :
+        abscisse = X visee
+        profondeur = Y visee
+        hauteur = erreur Y
+
+        erreur Y = Y mesuree - Y visee
 
     Toutes les coordonnees sont en CARREAUX.
     """
 
     if not donnees:
+
         print()
-        print("Aucune mesure disponible pour le graphique.")
+        print(
+            "Aucune mesure disponible pour le graphique."
+        )
+
         return
 
     # -----------------------------------------------------
-    # Recuperation des donnees
+    # Extraction des donnees
     # -----------------------------------------------------
 
     x_vise = [
@@ -759,8 +930,14 @@ def tracerErreurs3D(donnees):
     plt.tight_layout()
 
     print()
-    print("Affichage des courbes 3D...")
-    print("Fermer la fenetre graphique pour terminer le programme.")
+    print(
+        "Affichage des courbes 3D..."
+    )
+
+    print(
+        "Fermer la fenetre graphique "
+        "pour terminer le programme."
+    )
 
     plt.show()
 
@@ -775,9 +952,18 @@ def main():
     puis pointe les points demandes.
     """
 
-    print("=========================================")
-    print("TEST DE LA CALIBRATION")
-    print("=========================================")
+    print(
+        "========================================="
+    )
+
+    print(
+        "TEST DE LA CALIBRATION"
+    )
+
+    print(
+        "========================================="
+    )
+
     print()
 
     print(
@@ -794,22 +980,27 @@ def main():
 
     if serie is None:
 
-        print("Aucune calibration selectionnee.")
+        print(
+            "Aucune calibration selectionnee."
+        )
 
         return 0
 
     print()
+
     print(
         "Calibration selectionnee :",
         serie
     )
 
     print(
-        "Reconstruction du modele depuis "
-        "les points de cette serie..."
+        "Reconstruction du modele "
+        "depuis les points de cette serie..."
     )
 
-    modele = construireModeleSerie(serie)
+    modele = construireModeleSerie(
+        serie
+    )
 
     if modele is None:
         return 1
@@ -817,15 +1008,22 @@ def main():
     print()
 
     print(
-        "Calibration '%s' chargee : %d points d'ajustement"
+        "Calibration '%s' chargee : "
+        "%d points d'ajustement"
         % (
             serie,
-            modele.get("nb_points", 0)
+            modele.get(
+                "nb_points",
+                0
+            )
         )
     )
 
+    # Le modele interne conserve encore u/v.
+    # On les affiche ici sous la forme X/Y pour l'utilisateur.
     print(
-        "Zone calibree : x %.1f..%.1f, y %.1f..%.1f carreaux"
+        "Zone calibree : x %.1f..%.1f, "
+        "y %.1f..%.1f carreaux"
         % (
             modele["enveloppe"]["u_min"],
             modele["enveloppe"]["u_max"],
@@ -834,12 +1032,15 @@ def main():
         )
     )
 
-    residus = modele.get("residus")
+    residus = modele.get(
+        "residus"
+    )
 
     if residus:
 
         print(
-            "Erreur ajustement : rms %.2f carreaux, max %.2f carreaux"
+            "Erreur ajustement : rms %.2f carreaux, "
+            "max %.2f carreaux"
             % (
                 residus["rms_carreaux"],
                 residus["max_carreaux"]
@@ -853,7 +1054,8 @@ def main():
     if residus_validation:
 
         print(
-            "Erreur validation  : rms %.2f carreaux, max %.2f carreaux"
+            "Erreur validation  : rms %.2f carreaux, "
+            "max %.2f carreaux"
             % (
                 residus_validation["rms_carreaux"],
                 residus_validation["max_carreaux"]
@@ -873,15 +1075,24 @@ def main():
 
     mc = connecterRobot()
 
+    allerPositionInitiale(
+        mc
+    )
+
     if mc is None:
+
         return 1
 
-    allerPositionInitiale(mc)
+    if not verifierBase(
+        mc,
+        modele
+    ):
 
-    if not verifierBase(mc, modele):
         return 1
 
-    angles = lireAngles(mc)
+    angles = lireAngles(
+        mc
+    )
 
     if angles is None:
 
@@ -897,10 +1108,13 @@ def main():
     fichier_validation = os.path.join(
         DOSSIER_RESULTATS,
         "validation_pointage_%s.csv"
-        % nomFichierSecurise(serie)
+        % nomFichierSecurise(
+            serie
+        )
     )
 
     print()
+
     print(
         "Les tirs de cette session seront enregistres dans :"
     )
@@ -911,15 +1125,20 @@ def main():
     )
 
     # -----------------------------------------------------
-    # Liste utilisée pour les graphiques 3D
+    # Donnees conservées pour les courbes 3D
     # -----------------------------------------------------
 
     donnees_graphique = []
 
     try:
 
-        if not allumerPointeur(mc):
-            print("Le pointeur ne s'allume pas.")
+        if not allumerPointeur(
+            mc
+        ):
+
+            print(
+                "Le pointeur ne s'allume pas."
+            )
 
         while True:
 
@@ -936,8 +1155,7 @@ def main():
                     "Fin de la campagne de mesure."
                 )
 
-                # Affichage des courbes seulement
-                # si des mesures ont ete faites.
+                # Affichage des courbes 3D
                 tracerErreurs3D(
                     donnees_graphique
                 )
@@ -948,6 +1166,7 @@ def main():
 
             # -------------------------------------------------
             # Verification explicite de l'enveloppe
+            # choisie.
             # -------------------------------------------------
 
             if not dansEnveloppe(
@@ -959,12 +1178,14 @@ def main():
                 e = modele["enveloppe"]
 
                 print(
-                    "  Point hors de la zone de la calibration '%s'."
+                    "  Point hors de la zone "
+                    "de la calibration '%s'."
                     % serie
                 )
 
                 print(
-                    "  Zone autorisee : x %.1f..%.1f, y %.1f..%.1f carreaux."
+                    "  Zone autorisee : "
+                    "x %.1f..%.1f, y %.1f..%.1f carreaux."
                     % (
                         e["u_min"],
                         e["u_max"],
@@ -974,8 +1195,8 @@ def main():
                 )
 
                 print(
-                    "  Si ce point appartient a une autre zone, "
-                    "relancer le programme"
+                    "  Si ce point appartient a "
+                    "une autre zone, relancer le programme"
                 )
 
                 print(
@@ -986,9 +1207,6 @@ def main():
 
             # -------------------------------------------------
             # Calcul des angles
-            #
-            # x et y sont envoyes a la fonction de calibration
-            # comme ses deux coordonnees d'entree.
             # -------------------------------------------------
 
             resultat = anglesPourPoint(
@@ -1014,14 +1232,19 @@ def main():
             j4, j5 = resultat
 
             print(
-                "  Angles calcules : J4 = %+.2f   J5 = %+.2f"
+                "  Angles calcules : "
+                "J4 = %+.2f   J5 = %+.2f"
                 % (
                     j4,
                     j5
                 )
             )
 
-            arrive, mesure = approcher(
+            # -------------------------------------------------
+            # Deplacement avec rattrapage mecanique
+            # -------------------------------------------------
+
+            vise, mesure = viserAngles(
                 mc,
                 base,
                 j4,
@@ -1037,10 +1260,21 @@ def main():
 
                 continue
 
-            if not arrive:
+            if not vise:
 
                 print(
-                    "  ATTENTION : la tete n'a pas atteint la consigne."
+                    "  ATTENTION : la tete se repose "
+                    "a %+.2f / %+.2f deg de l'angle demande"
+                    % (
+                        mesure[3] - j4,
+                        mesure[4] - j5
+                    )
+                )
+
+                print(
+                    "  (tolerance %.2f deg). "
+                    "Le rattrapage n'a pas converge."
+                    % TOLERANCE_POINTAGE
                 )
 
             # -------------------------------------------------
@@ -1065,7 +1299,8 @@ def main():
                 if derive > 0.1:
 
                     print(
-                        "  Angles atteints : J4 = %+.2f  J5 = %+.2f"
+                        "  Angles atteints : "
+                        "J4 = %+.2f  J5 = %+.2f"
                         "  -> %.2f carreaux de derive mecanique"
                         % (
                             mesure[3],
@@ -1083,7 +1318,7 @@ def main():
             )
 
             # -------------------------------------------------
-            # Stockage pour les courbes 3D
+            # Sauvegarde pour les graphiques
             # -------------------------------------------------
 
             if reel is not None:
@@ -1096,23 +1331,30 @@ def main():
                 })
 
             # -------------------------------------------------
-            # Enregistrement dans le CSV
+            # Enregistrement du tir
             # -------------------------------------------------
 
             enregistrerTir(
                 demande,
-                (mesure[3], mesure[4]),
+                (
+                    mesure[3],
+                    mesure[4]
+                ),
                 reel,
                 chemin=fichier_validation
             )
 
     finally:
 
-        eteindrePointeur(mc)
+        eteindrePointeur(
+            mc
+        )
 
         print()
+
         print(
-            "Pointeur eteint. Moteurs laisses sous tension."
+            "Pointeur eteint. "
+            "Moteurs laisses sous tension."
         )
 
         print(
@@ -1141,6 +1383,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
 
         print()
+
         print(
             "Programme interrompu par l'operateur."
         )
@@ -1148,6 +1391,7 @@ if __name__ == "__main__":
         code_retour = 1
 
     print()
+
     print(
         "Programme termine."
     )
