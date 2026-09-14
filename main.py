@@ -4,9 +4,10 @@ from camera.ModuleCam.ModuleCamera import LaCamera
 from camera.ModuleCam.Calibrage import CoordenéesAuRobo, CoordonnerCalibrage
 
 # Load YOLOv8 model
-model = YOLO("src/IA/Model2/runs/detect/train/weights/best.pt")
+model = YOLO("src/camera/IA/Model5 - V2/runs/detect/train/weights/best.pt")
 
-distanceZone = 75   # En cm
+distanceHaut = 12   # En cm
+distanceCote = 11
 coffD = []
 coordonnerZero = []
 coordonnerReel = []
@@ -21,7 +22,7 @@ def detect_objects(frame):
             class_id = int(box.cls[0])  # Get class ID
             confidence = box.conf[0].item()  # Confidence score
 
-            if confidence > 0.5:
+            if confidence > 0.43:
                 label = model.names[class_id]
                 detected_objects.append(label)
 
@@ -41,17 +42,19 @@ def main():
         return()
     
     ret,frame = camera.camera.read()
+    if camera.flagCaptureImage(ret):
+        return()
+    
     width, height = camera.tailleCamera()
 
-    coffD, coordonnerZero = CoordonnerCalibrage(frame, distanceZone)
+    coffD, coordonnerZero = CoordonnerCalibrage(frame, distanceCote, distanceHaut)
 
     if coffD is None:
         print("Calibrage impossible : 4 coins rouges non détectés")
         return()
 
     while True:
-        ret,frame = camera.camera.read()
-
+        ret,frame = camera.read_latest()
         if camera.flagCaptureImage(ret):
             break
 
