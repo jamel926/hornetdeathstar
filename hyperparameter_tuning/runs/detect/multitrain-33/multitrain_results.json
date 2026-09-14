@@ -1,0 +1,24 @@
+{
+  "results": {
+    "dataset.v2i.yolov8": {
+      "metrics/precision(B)": 0.94702,
+      "metrics/recall(B)": 0.75862,
+      "metrics/mAP50(B)": 0.95484,
+      "metrics/mAP50-95(B)": 0.76959,
+      "val/box_loss": 0.81915,
+      "val/cls_loss": 1.3161,
+      "val/l1_loss": 0.00239,
+      "fitness": 0.76959
+    }
+  },
+  "mean": {
+    "val/box_loss": 0.81915,
+    "metrics/mAP50(B)": 0.95484,
+    "val/cls_loss": 1.3161,
+    "val/l1_loss": 0.00239,
+    "metrics/recall(B)": 0.75862,
+    "fitness": 0.76959,
+    "metrics/precision(B)": 0.94702,
+    "metrics/mAP50-95(B)": 0.76959
+  }
+}

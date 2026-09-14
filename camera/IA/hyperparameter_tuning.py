@@ -9,13 +9,13 @@ search_space = {
     "degrees": (0.0, 45.0),
 }
 
-DATA_YAML = r"C:\Users\josev\Documents\projects\hornetdeathstar\camera\IA\Model2\deathstar_dataset.v1i.yolov8\data.yaml"
+DATA_YAML = r"C:\Users\josev\Downloads\dataset.v2i.yolov8\data.yaml"
 
 # Tune hyperparameters on dataset for 30 epochs
 model.tune(
     data=DATA_YAML,
     epochs=30,
-    iterations=50,
+    iterations=10,
     optimizer="AdamW",
     space=search_space,
     device=0, # If your GPU is not available, you can set device to "cpu"
