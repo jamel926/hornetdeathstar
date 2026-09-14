@@ -1020,7 +1020,7 @@ def residusBilineaire(bilineaire, mesures):
 # 7. LECTURE ET ECRITURE DES FICHIERS
 # =========================================================
 
-def enteteCompatible(chemin):
+def enteteCompatible(chemin, entete_attendu=None):
     """Verifie que le fichier existant porte bien les colonnes que l'on s'apprete a ecrire."""
 
     """
@@ -1037,7 +1037,13 @@ def enteteCompatible(chemin):
 
     Une campagne coute une matinee : mieux vaut refuser
     d'ecrire que produire un fichier qui se relit faux.
+
+    Le garde-fou sert aussi aux autres fichiers de mesure du
+    dossier, d'ou l'entete en argument.
     """
+
+    if entete_attendu is None:
+        entete_attendu = ENTETE_CSV
 
     try:
         with open(chemin, "r", newline="") as fichier:
@@ -1053,14 +1059,14 @@ def enteteCompatible(chemin):
 
     # Les colonnes en trop a la fin (un commentaire libre, par
     # exemple) ne genent pas : seules celles que l'on ecrit comptent.
-    if entete[:len(ENTETE_CSV)] == ENTETE_CSV:
+    if entete[:len(entete_attendu)] == entete_attendu:
         return True
 
     print()
     print("REFUS D'ECRIRE : le fichier de mesures n'a pas les colonnes attendues.")
     print("  fichier  :", chemin)
-    print("  attendu  :", ",".join(ENTETE_CSV))
-    print("  trouve   :", ",".join(entete[:len(ENTETE_CSV)]))
+    print("  attendu  :", ",".join(entete_attendu))
+    print("  trouve   :", ",".join(entete[:len(entete_attendu)]))
     print("Ajouter des points ici produirait un modele faux d'un facteur d'echelle.")
     print("Convertir l'ancien fichier, ou en commencer un nouveau.")
 
