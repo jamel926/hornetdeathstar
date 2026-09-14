@@ -293,6 +293,28 @@ dispersion sur J5 valent 0,8 cm au centre mais environ
 """
 RECUL_APPROCHE = 8.0       # degres
 
+"""
+Rattrapage de l'ecart de repos.
+
+Le bras ne s'arrete pas sur la consigne : il s'arrete la ou
+son asservissement se tait, un peu en dessous, la tete tirant
+vers le bas. Mesure sur les trois tirs du 11/09 : 0,7 a 1,8
+degre de deficit sur J4 ET sur J5, soit 1,5 a 2,3 cm au sol.
+
+Rien ne le signalait, parce que TOLERANCE_TETE vaut 2 degres :
+bougerTete() declarait "arrive" et rendait la main.
+
+La correction est directe : relire la pose atteinte, ajouter
+l'ecart a la consigne, recommencer. L'ecart de repos etant a
+peu pres constant pour une pose donnee, deux passes suffisent.
+
+TOLERANCE_POINTAGE vaut 0,2 degre, soit environ 2 mm au sol :
+en dessous, on corrigerait le bruit de lecture des codeurs
+(pas de 0,088 degre) sans rien gagner.
+"""
+TOLERANCE_POINTAGE = 0.2   # degres
+CORRECTIONS_MAX = 3        # passes de rattrapage apres l'arrivee
+
 # Limites constructeur (pymycobot/robot_info.py).
 J4_MIN, J4_MAX = -150.0, 150.0     # degres
 J5_MIN, J5_MAX = -155.0, 160.0     # degres
@@ -998,6 +1020,53 @@ def residusBilineaire(bilineaire, mesures):
 # 7. LECTURE ET ECRITURE DES FICHIERS
 # =========================================================
 
+def enteteCompatible(chemin):
+    """Verifie que le fichier existant porte bien les colonnes que l'on s'apprete a ecrire."""
+
+    """
+    L'entete n'est ecrit qu'a la creation du fichier. Une
+    campagne suivante s'ajoute donc SOUS l'entete deja en
+    place, quel qu'il soit -- et personne ne le relit.
+
+    C'est exactement ce qui est arrive a la campagne du
+    11/09 : les impacts etaient saisis en carreaux, le
+    fichier portait encore des colonnes u_cm / v_cm, et la
+    relecture les a divises par trois sans rien signaler.
+    Modele trois fois trop petit, zone calibree amputee des
+    deux tiers, residus flatteurs d'un facteur trois.
+
+    Une campagne coute une matinee : mieux vaut refuser
+    d'ecrire que produire un fichier qui se relit faux.
+    """
+
+    try:
+        with open(chemin, "r", newline="") as fichier:
+            entete = next(csv.reader(fichier), None)
+
+    except Exception as e:
+        print("Impossible de relire l'entete du fichier de mesures.")
+        print("Erreur :", e)
+        return False
+
+    if entete is None:
+        return True
+
+    # Les colonnes en trop a la fin (un commentaire libre, par
+    # exemple) ne genent pas : seules celles que l'on ecrit comptent.
+    if entete[:len(ENTETE_CSV)] == ENTETE_CSV:
+        return True
+
+    print()
+    print("REFUS D'ECRIRE : le fichier de mesures n'a pas les colonnes attendues.")
+    print("  fichier  :", chemin)
+    print("  attendu  :", ",".join(ENTETE_CSV))
+    print("  trouve   :", ",".join(entete[:len(ENTETE_CSV)]))
+    print("Ajouter des points ici produirait un modele faux d'un facteur d'echelle.")
+    print("Convertir l'ancien fichier, ou en commencer un nouveau.")
+
+    return False
+
+
 def enregistrerPoint(serie, usage, index, consigne, mesure, impact, chemin=None):
     """Ajoute une ligne au fichier de mesures, en creant l'entete au premier point."""
 
@@ -1013,6 +1082,9 @@ def enregistrerPoint(serie, usage, index, consigne, mesure, impact, chemin=None)
         os.makedirs(os.path.dirname(chemin), exist_ok=True)
 
         nouveau = not os.path.exists(chemin)
+
+        if not nouveau and not enteteCompatible(chemin):
+            return False
 
         with open(chemin, "a", newline="") as fichier:
 
@@ -1072,7 +1144,18 @@ def chargerMesures(chemin=None, usage=None, serie=None):
     try:
         with open(chemin, "r", newline="") as fichier:
 
-            for ligne in csv.DictReader(fichier):
+            lecteur = csv.DictReader(fichier)
+
+            # La conversion depuis les centimetres est legitime, mais
+            # elle doit se voir : c'est elle qui a fait passer une
+            # campagne entiere au tiers de son echelle.
+            colonnes = lecteur.fieldnames or []
+
+            if "u_carreaux" not in colonnes and "u_cm" in colonnes:
+                print("Fichier de mesures en centimetres : conversion en carreaux"
+                      " (division par %.0f)." % COTE_CARREAU)
+
+            for ligne in lecteur:
 
                 if usage is not None and ligne.get("usage") != usage:
                     continue
@@ -1388,6 +1471,62 @@ def approcher(mc, base, j4, j5, j6):
     bougerTete(mc, base, j4_recul, j5_recul, j6)
 
     return bougerTete(mc, base, j4, j5, j6)
+
+
+def viserAngles(mc, base, j4, j5, j6, tolerance=TOLERANCE_POINTAGE, passes=CORRECTIONS_MAX):
+    """Amene la tete aux angles demandes et rattrape l'ecart de repos, puis retourne (vise, pose atteinte)."""
+
+    """
+    approcher() envoie une consigne et accepte la pose ou le
+    bras s'immobilise, meme si elle est a deux degres. Ici on
+    vise l'angle, pas la consigne : tant que la pose relevee
+    n'est pas sur l'angle demande, on rallonge la consigne de
+    ce qui manque et on y retourne.
+
+    Chaque passe repasse par approcher(), donc par le recul :
+    l'arrivee se fait toujours du meme cote, y compris quand
+    la correction fait redescendre la consigne. Sans cela le
+    rattrapage attaquerait le jeu des reducteurs par l'autre
+    face et rendrait la pose non reproductible -- ce que toute
+    la calibration cherche justement a eviter.
+
+    La consigne corrigee peut sortir des limites constructeur
+    au bord de la course : on la borne, et la fonction rend
+    alors False sans insister.
+    """
+
+    consigne_j4, consigne_j5 = j4, j5
+
+    arrive, pose = approcher(mc, base, consigne_j4, consigne_j5, j6)
+
+    for _ in range(passes):
+
+        if pose is None:
+            return (False, None)
+
+        ecart_j4 = j4 - pose[3]
+        ecart_j5 = j5 - pose[4]
+
+        if max(abs(ecart_j4), abs(ecart_j5)) <= tolerance:
+            return (True, pose)
+
+        corrigee_j4 = min(max(consigne_j4 + ecart_j4, J4_MIN), J4_MAX)
+        corrigee_j5 = min(max(consigne_j5 + ecart_j5, J5_MIN), J5_MAX)
+
+        # Consigne deja en butee : insister ne changerait plus rien.
+        if (corrigee_j4, corrigee_j5) == (consigne_j4, consigne_j5):
+            return (False, pose)
+
+        consigne_j4, consigne_j5 = corrigee_j4, corrigee_j5
+
+        arrive, pose = approcher(mc, base, consigne_j4, consigne_j5, j6)
+
+    if pose is None:
+        return (False, None)
+
+    reste = max(abs(j4 - pose[3]), abs(j5 - pose[4]))
+
+    return (reste <= tolerance, pose)
 
 
 def bougerTeteDuMemeCote(mc, base, courant_j4, courant_j5, cible_j4, cible_j5, j6):

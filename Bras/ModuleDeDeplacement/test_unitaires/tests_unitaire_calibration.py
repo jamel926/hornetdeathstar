@@ -177,6 +177,27 @@ class FauxBras:
         return 1
 
 
+class BrasQuiSAffaisse(FauxBras):
+    """Bras qui s'immobilise sous sa consigne sur J4 et J5, comme le vrai sous le poids de la tete."""
+
+    """
+    Le deficit reste sous TOLERANCE_TETE : c'est tout le
+    probleme, bougerTete() declare "arrive" et personne ne
+    voit les deux centimetres au sol.
+    """
+
+    DEFICIT = 1.5   # degres, ordre de grandeur releve le 11/09
+
+    def send_angles(self, angles, vitesse):
+
+        FauxBras.send_angles(self, angles, vitesse)
+
+        self.pose[3] -= self.DEFICIT
+        self.pose[4] -= self.DEFICIT
+
+        return 1
+
+
 # =========================================================
 # 4. LE MODELE
 # =========================================================
@@ -440,6 +461,68 @@ class TestMouvementTete(unittest.TestCase):
 
         for consigne in self.bras.consignes:
             self.assertGreaterEqual(consigne[3], calibration_grille.J4_MIN)
+
+
+class TestRattrapageDeLEcartDeRepos(unittest.TestCase):
+    """Viser un angle, ce n'est pas l'envoyer : le bras se repose en dessous et il faut l'y ramener."""
+
+    def setUp(self):
+        self.bras = BrasQuiSAffaisse()
+        self.base = [0.0, 50.0, FauxBras.J3_BLOQUE]
+
+        self.sleep_origine = calibration_grille.time.sleep
+        calibration_grille.time.sleep = lambda duree: None
+
+    def tearDown(self):
+        calibration_grille.time.sleep = self.sleep_origine
+
+    def test_le_defaut_existe_bien_sans_rattrapage(self):
+        """Garde-fou du test lui-meme : approcher() seul doit laisser le bras sous sa consigne."""
+
+        arrive, pose = calibration_grille.approcher(self.bras, self.base, 30.0, -10.0, 0.0)
+
+        self.assertTrue(arrive)
+        self.assertAlmostEqual(pose[3], 30.0 - BrasQuiSAffaisse.DEFICIT)
+        self.assertAlmostEqual(pose[4], -10.0 - BrasQuiSAffaisse.DEFICIT)
+
+    def test_la_consigne_est_rallongee_jusqu_a_l_angle_demande(self):
+        """Apres rattrapage, la pose relevee doit etre sur l'angle demande, pas sur la consigne envoyee."""
+
+        vise, pose = calibration_grille.viserAngles(self.bras, self.base, 30.0, -10.0, 0.0)
+
+        self.assertTrue(vise)
+        self.assertLessEqual(abs(pose[3] - 30.0), calibration_grille.TOLERANCE_POINTAGE)
+        self.assertLessEqual(abs(pose[4] - (-10.0)), calibration_grille.TOLERANCE_POINTAGE)
+
+        # La consigne finale est bien allee chercher l'angle au-dela.
+        self.assertGreater(self.bras.consignes[-1][3], 30.0)
+
+    def test_chaque_arrivee_passe_toujours_par_un_recul(self):
+        """Le rattrapage ne doit pas court-circuiter l'approche du meme cote."""
+
+        calibration_grille.viserAngles(self.bras, self.base, 30.0, -10.0, 0.0)
+
+        self.assertEqual(len(self.bras.consignes) % 2, 0)
+
+        for i in range(0, len(self.bras.consignes), 2):
+
+            recul = self.bras.consignes[i]
+            cible = self.bras.consignes[i + 1]
+
+            self.assertLess(recul[3], cible[3])
+            self.assertLess(recul[4], cible[4])
+
+    def test_butee_signalee_au_lieu_d_etre_forcee(self):
+        """En butee constructeur, la consigne ne peut plus etre rallongee : il faut le dire."""
+
+        vise, pose = calibration_grille.viserAngles(
+            self.bras, self.base, calibration_grille.J4_MAX, 0.0, 0.0)
+
+        self.assertFalse(vise)
+        self.assertIsNotNone(pose)
+
+        for consigne in self.bras.consignes:
+            self.assertLessEqual(consigne[3], calibration_grille.J4_MAX)
 
 
 class TestPointeur(unittest.TestCase):
