@@ -69,6 +69,7 @@ from calibration_grille import (
     predireImpact,
 )
 
+from PU_PositionInitiale import allerPositionInitiale
 
 # =========================================================
 # 2. PARAMETRES
@@ -446,6 +447,7 @@ def main():
     # Connexion au robot seulement apres le choix de calibration.
     # ---------------------------------------------------------
     mc = connecterRobot()
+    allerPositionInitiale(mc)
 
     if mc is None:
         return 1
