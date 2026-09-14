@@ -21,6 +21,18 @@ donnee. Si J1, J2 ou J3 ont bouge depuis la calibration,
 tout le modele est faux. Le script refuse alors de
 continuer plutot que de viser a cote sans le dire.
 
+Pourquoi le tir corrige sa propre consigne :
+-------------------------------------------
+Le bras ne s'arrete pas sur la consigne, mais un peu en
+dessous. Le 11/09, sur les trois tirs enregistres, le
+deficit valait 0,7 a 1,8 degre sur les deux axes, soit 1,5
+a 2,3 cm au sol -- plus que l'erreur du modele lui-meme.
+
+Le tir passe donc par viserAngles(), qui relit la pose
+atteinte et rallonge la consigne tant que l'angle demande
+n'est pas tenu. L'ecart residuel affiche apres chaque tir
+ne vient plus de la mecanique : c'est celui du modele.
+
 Utilisation :
 ------------
     python3 calibration_test.py
@@ -55,9 +67,10 @@ from calibration_grille import (
     J4_MIN, J4_MAX, J5_MIN, J5_MAX,
     MARGE_ENVELOPPE,
     TOLERANCE_BASE,
+    TOLERANCE_POINTAGE,
     allumerPointeur,
     anglesPourPoint,
-    approcher,
+    viserAngles,
     ajusterModele,
     calculerResidus,
     chargerMesures,
@@ -509,14 +522,17 @@ def main():
 
             print("  Angles calcules : J4 = %+.2f   J5 = %+.2f" % (j4, j5))
 
-            arrive, mesure = approcher(mc, base, j4, j5, j6)
+            vise, mesure = viserAngles(mc, base, j4, j5, j6)
 
             if mesure is None:
                 print("  Mouvement echoue.")
                 continue
 
-            if not arrive:
-                print("  ATTENTION : la tete n'a pas atteint la consigne.")
+            if not vise:
+                print("  ATTENTION : la tete se repose a %+.2f / %+.2f deg de l'angle demande"
+                      % (mesure[3] - j4, mesure[4] - j5))
+                print("  (tolerance %.2f deg). Le rattrapage n'a pas converge."
+                      % TOLERANCE_POINTAGE)
 
             # -------------------------------------------------
             # Ecart de reproduction
