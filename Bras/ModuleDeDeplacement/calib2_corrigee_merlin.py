@@ -1,34 +1,41 @@
 """
 =========================================================
 TEST DE LA CALIBRATION - CALIB 2 + CORRECTION APPRENTIE
+                 CAMPAGNE ALEATOIRE
 =========================================================
 
 Principe :
 ----------
-1. L'utilisateur donne une cible X/Y en carreaux.
-2. Le modele de correction de Calib 2 predit :
+
+1. L'utilisateur choisit le nombre de positions a tester.
+2. Le programme genere des positions X/Y aleatoires
+   dans l'enveloppe de Calib 2.
+3. Le modele de correction de Calib 2 predit :
        erreur_x = f(x, y)
        erreur_y = g(x, y)
-3. La cible est corrigee :
+4. La cible est corrigee :
        x_corrige = x - erreur_x
        y_corrige = y - erreur_y
-4. La calibration geometrique calcule J4/J5 a partir
-   de la cible corrigee.
-5. viserAngles() ameliore l'atteinte des angles.
-6. L'utilisateur mesure le point reel.
-7. L'erreur est toujours calculee par rapport a la cible
-   ORIGINALE afin de continuer l'apprentissage.
+5. La calibration geometrique calcule J4/J5.
+6. Le robot se deplace vers la cible corrigee.
+7. Le temps de deplacement est mesure.
+8. Le laser reste ETEINT pendant le mouvement.
+9. Si le robot atteint correctement la position,
+   le laser est allume.
+10. L'utilisateur mesure alors la position reelle du spot.
+11. Le laser est eteint avant le deplacement suivant.
+12. Toutes les donnees sont enregistrees dans un CSV.
 
 Toutes les positions sont en CARREAUX.
 
 Calibration utilisee :
     Calib 2
 
-Modele de correction attendu :
+Modele de correction :
     resultats/modele_correction_Calib_2.json
 
-Mesures d'apprentissage :
-    resultats/apprentissage_erreurs.csv
+Fichier de campagne :
+    resultats/campagne_aleatoire_Calib_2.csv
 """
 
 
@@ -40,6 +47,8 @@ import os
 import csv
 import re
 import json
+import random
+import time
 
 from datetime import datetime
 
@@ -66,7 +75,6 @@ from calibration_grille import (
     dansEnveloppe,
     eteindrePointeur,
     lireAngles,
-    lireTexte,
     predireImpact,
 )
 
@@ -81,21 +89,9 @@ from PU_PositionInitiale import allerPositionInitiale
 SERIE = "Calib 2"
 
 
-FICHIER_VALIDATION = os.path.join(
-    DOSSIER_RESULTATS,
-    "validation_pointage_Calib_2.csv",
-)
-
-
 FICHIER_MESURES = os.path.join(
     DOSSIER_RESULTATS,
     "calibration_grille.csv",
-)
-
-
-FICHIER_APPRENTISSAGE = os.path.join(
-    DOSSIER_RESULTATS,
-    "apprentissage_erreurs.csv",
 )
 
 
@@ -105,27 +101,32 @@ FICHIER_MODELE_CORRECTION = os.path.join(
 )
 
 
-ENTETE_VALIDATION = [
-    "horodatage",
-    "x_demande_carreaux",
-    "y_demande_carreaux",
-    "J4",
-    "J5",
-    "x_reel_carreaux",
-    "y_reel_carreaux",
-    "ecart_carreaux",
-]
+FICHIER_CAMPAGNE = os.path.join(
+    DOSSIER_RESULTATS,
+    "campagne_aleatoire_Calib_2.csv",
+)
 
 
-ENTETE_APPRENTISSAGE = [
+ENTETE_CAMPAGNE = [
     "horodatage",
-    "serie",
-    "x_vise",
-    "y_vise",
+    "numero_tir",
+    "x_demande",
+    "y_demande",
+    "erreur_x_predite",
+    "erreur_y_predite",
+    "x_corrige",
+    "y_corrige",
+    "J4_consigne",
+    "J5_consigne",
+    "J4_atteint",
+    "J5_atteint",
+    "temps_deplacement_s",
+    "position_atteinte",
     "x_mesure",
     "y_mesure",
     "erreur_x",
     "erreur_y",
+    "erreur_totale",
 ]
 
 
@@ -155,13 +156,6 @@ def nomFichierSecurise(serie):
 def chargerModeleCorrection():
     """
     Charge automatiquement le modele polynomial de Calib 2.
-
-    Le fichier attendu est :
-
-        resultats/modele_correction_Calib_2.json
-
-    Retourne None si le fichier n'existe pas ou
-    si son contenu est invalide.
     """
 
     print()
@@ -219,10 +213,6 @@ def chargerModeleCorrection():
 
         return None
 
-    # -----------------------------------------------------
-    # Verification de la serie
-    # -----------------------------------------------------
-
     serie_modele = (
         modele.get("serie") or ""
     ).strip()
@@ -245,10 +235,6 @@ def chargerModeleCorrection():
         )
 
         return None
-
-    # -----------------------------------------------------
-    # Verification des champs essentiels
-    # -----------------------------------------------------
 
     champs_requis = [
         "degre",
@@ -326,22 +312,6 @@ def predireCorrection(
 ):
     """
     Calcule l'erreur predite pour la cible (x, y).
-
-    Le modele contient :
-
-        centre_x
-        centre_y
-        echelle_x
-        echelle_y
-
-    puis les coefficients des termes polynomiaux.
-
-    Retourne :
-
-        erreur_x_predite,
-        erreur_y_predite
-
-    en CARREAUX.
     """
 
     if modele is None:
@@ -368,15 +338,12 @@ def predireCorrection(
     )
 
     if abs(echelle_x) < 1e-12:
+
         echelle_x = 1.0
 
     if abs(echelle_y) < 1e-12:
-        echelle_y = 1.0
 
-    # -----------------------------------------------------
-    # Normalisation identique a celle de
-    # calib_apprentissage.py
-    # -----------------------------------------------------
+        echelle_y = 1.0
 
     x_normalise = (
         x - centre_x
@@ -385,10 +352,6 @@ def predireCorrection(
     y_normalise = (
         y - centre_y
     ) / echelle_y
-
-    # -----------------------------------------------------
-    # Construction des termes
-    # -----------------------------------------------------
 
     valeurs = []
 
@@ -404,16 +367,13 @@ def predireCorrection(
 
         valeur = (
             (x_normalise ** i)
-            * (y_normalise ** j)
+            *
+            (y_normalise ** j)
         )
 
         valeurs.append(
             valeur
         )
-
-    # -----------------------------------------------------
-    # Erreur X
-    # -----------------------------------------------------
 
     coefficients_x = (
         modele["coefficients_erreur_x"]
@@ -427,9 +387,6 @@ def predireCorrection(
             valeurs
         )
     )
-    # -----------------------------------------------------
-    # Erreur Y
-    # -----------------------------------------------------
 
     coefficients_y = (
         modele["coefficients_erreur_y"]
@@ -460,17 +417,10 @@ def corrigerCible(
     y
 ):
     """
-    Calcule la cible corrigee a partir du modele.
+    Calcule la cible corrigee.
 
-    Le modele predit :
-
-        x_mesure = x_vise + erreur_x
-        y_mesure = y_vise + erreur_y
-
-    Pour compenser :
-
-        x_corrige = x_vise - erreur_x
-        y_corrige = y_vise - erreur_y
+        x_corrige = x - erreur_x
+        y_corrige = y - erreur_y
     """
 
     erreur_x, erreur_y = predireCorrection(
@@ -599,221 +549,7 @@ def verifierBase(
 
 
 # =========================================================
-# 8. ENREGISTREMENT DE LA MESURE
-# =========================================================
-
-def enregistrerTir(
-    demande,
-    angles,
-    reel,
-    chemin=None
-):
-    """
-    Enregistre la mesure dans le fichier de validation.
-    """
-
-    if reel is None:
-
-        ecart = ""
-        x_reel = ""
-        y_reel = ""
-
-    else:
-
-        ecart = round(
-            (
-                (reel[0] - demande[0]) ** 2
-                +
-                (reel[1] - demande[1]) ** 2
-            ) ** 0.5,
-            3
-        )
-
-        x_reel = round(
-            reel[0],
-            3
-        )
-
-        y_reel = round(
-            reel[1],
-            3
-        )
-
-    try:
-
-        os.makedirs(
-            DOSSIER_RESULTATS,
-            exist_ok=True
-        )
-
-        fichier_cible = (
-            chemin
-            if chemin is not None
-            else FICHIER_VALIDATION
-        )
-
-        nouveau = not os.path.exists(
-            fichier_cible
-        )
-
-        with open(
-            fichier_cible,
-            "a",
-            newline=""
-        ) as fichier:
-
-            redacteur = csv.writer(
-                fichier
-            )
-
-            if nouveau:
-
-                redacteur.writerow(
-                    ENTETE_VALIDATION
-                )
-
-            redacteur.writerow([
-                datetime.now().isoformat(
-                    timespec="seconds"
-                ),
-                round(
-                    demande[0],
-                    3
-                ),
-                round(
-                    demande[1],
-                    3
-                ),
-                round(
-                    angles[0],
-                    3
-                ),
-                round(
-                    angles[1],
-                    3
-                ),
-                x_reel,
-                y_reel,
-                ecart,
-            ])
-
-        return True
-
-    except Exception as e:
-
-        print(
-            "Impossible d'enregistrer le tir :",
-            e
-        )
-
-        return False
-
-
-def enregistrerMesureApprentissage(
-    demande,
-    reel
-):
-    """
-    Enregistre les donnees necessaires a un prochain
-    apprentissage.
-
-    IMPORTANT :
-    la cible est la cible ORIGINALE de l'utilisateur,
-    pas la cible corrigee envoyee au robot.
-    """
-
-    if reel is None:
-
-        return False
-
-    x_vise = demande[0]
-    y_vise = demande[1]
-
-    x_mesure = reel[0]
-    y_mesure = reel[1]
-
-    erreur_x = (
-        x_mesure
-        - x_vise
-    )
-
-    erreur_y = (
-        y_mesure
-        - y_vise
-    )
-
-    try:
-
-        os.makedirs(
-            DOSSIER_RESULTATS,
-            exist_ok=True
-        )
-
-        nouveau = not os.path.exists(
-            FICHIER_APPRENTISSAGE
-        )
-
-        with open(
-            FICHIER_APPRENTISSAGE,
-            "a",
-            newline=""
-        ) as fichier:
-
-            redacteur = csv.writer(
-                fichier
-            )
-
-            if nouveau:
-
-                redacteur.writerow(
-                    ENTETE_APPRENTISSAGE
-                )
-
-            redacteur.writerow([
-                datetime.now().isoformat(
-                    timespec="seconds"
-                ),
-                SERIE,
-                round(
-                    x_vise,
-                    5
-                ),
-                round(
-                    y_vise,
-                    5
-                ),
-                round(
-                    x_mesure,
-                    5
-                ),
-                round(
-                    y_mesure,
-                    5
-                ),
-                round(
-                    erreur_x,
-                    5
-                ),
-                round(
-                    erreur_y,
-                    5
-                ),
-            ])
-
-        return True
-
-    except Exception as e:
-
-        print(
-            "Impossible d'enregistrer la mesure d'apprentissage :",
-            e
-        )
-
-        return False
-
-
-# =========================================================
-# 9. CALIBRATION GEOMETRIQUE : CALIB 2 UNIQUEMENT
+# 8. CHARGEMENT DE CALIB 2
 # =========================================================
 
 def chargerBaseSerie():
@@ -875,7 +611,7 @@ def chargerBaseSerie():
 
 def construireModeleCalib2():
     """
-    Reconstruit exclusivement la calibration 'Calib 2'.
+    Reconstruit exclusivement la calibration Calib 2.
     """
 
     ajustement = chargerMesures(
@@ -933,153 +669,309 @@ def construireModeleCalib2():
 
 
 # =========================================================
-# 10. DIALOGUE UTILISATEUR
+# 9. GENERATION DES POSITIONS ALEATOIRES
 # =========================================================
 
-def lireCible():
+def demanderNombrePositions():
     """
-    Demande une cible X/Y en carreaux.
+    Demande combien de positions aleatoires seront testees.
     """
 
     print()
-    print(
-        "Point a viser : deux nombres en CARREAUX "
-        "(ex : 4 -2)."
-    )
-
-    print(
-        "Taper fin pour terminer."
-    )
+    print("=========================================")
+    print("CAMPAGNE ALEATOIRE")
+    print("=========================================")
 
     while True:
 
-        reponse = lireTexte(
-            "cible > "
-        )
-
-        if reponse.lower() in (
-            "fin",
-            "f",
-            "q"
-        ):
-
-            return None
-
-        morceaux = (
-            reponse
-            .replace(
-                ",",
-                " "
-            )
-            .split()
-        )
-
-        if len(morceaux) != 2:
-
-            print(
-                "  Il faut deux nombres separes par un espace."
-            )
-
-            continue
+        reponse = input(
+            "Nombre de positions a tester > "
+        ).strip()
 
         try:
 
-            x = float(
-                morceaux[0]
-            )
-
-            y = float(
-                morceaux[1]
-            )
-
-            return (
-                x,
-                y
+            nombre = int(
+                reponse
             )
 
         except ValueError:
 
             print(
-                "  Saisie illisible."
+                "  Saisir un nombre entier positif."
             )
 
+            continue
 
-def lireImpactReel(
-    demande
+        if nombre > 0:
+
+            return nombre
+
+        print(
+            "  Le nombre doit etre superieur a 0."
+        )
+
+
+def genererPositionsAleatoires(
+    modele,
+    nombre
 ):
     """
-    Demande la position reelle du spot en carreaux.
+    Genere des positions entieres aleatoires en carreaux.
+
+    Les doublons sont evites autant que possible.
     """
 
-    print(
-        "  Ou le spot est-il tombe ? deux nombres en carreaux,"
-    )
+    enveloppe = modele["enveloppe"]
 
-    print(
-        "  ou Entree si le releve n'est pas fait."
-    )
-
-    reponse = lireTexte(
-        "  impact reel > "
-    )
-
-    if not reponse:
-
-        return None
-
-    morceaux = (
-        reponse
-        .replace(
-            ",",
-            " "
+    x_min = int(
+        round(
+            enveloppe["u_min"]
         )
-        .split()
     )
 
-    if len(morceaux) != 2:
+    x_max = int(
+        round(
+            enveloppe["u_max"]
+        )
+    )
 
+    y_min = int(
+        round(
+            enveloppe["v_min"]
+        )
+    )
+
+    y_max = int(
+        round(
+            enveloppe["v_max"]
+        )
+    )
+
+    toutes_positions = [
+        (
+            x,
+            y
+        )
+        for x in range(
+            x_min,
+            x_max + 1
+        )
+        for y in range(
+            y_min,
+            y_max + 1
+        )
+        if dansEnveloppe(
+            modele,
+            x,
+            y
+        )
+    ]
+
+    if not toutes_positions:
+
+        raise RuntimeError(
+            "Aucune position entiere disponible "
+            "dans l'enveloppe de Calib 2."
+        )
+
+    if nombre > len(toutes_positions):
+
+        print()
         print(
-            "  Saisie ignoree."
-        )
-
-        return None
-
-    try:
-
-        reel = (
-            float(
-                morceaux[0]
-            ),
-            float(
-                morceaux[1]
+            "ATTENTION : %d positions demandees, "
+            "mais seulement %d positions distinctes "
+            "sont disponibles."
+            % (
+                nombre,
+                len(toutes_positions)
             )
         )
 
-    except ValueError:
-
         print(
-            "  Saisie ignoree."
+            "Les positions seront reutilisees."
         )
 
-        return None
+        positions = []
 
-    ecart = (
-        (
-            (reel[0] - demande[0]) ** 2
-            +
-            (reel[1] - demande[1]) ** 2
-        ) ** 0.5
+        while len(positions) < nombre:
+
+            positions.append(
+                random.choice(
+                    toutes_positions
+                )
+            )
+
+        return positions
+
+    return random.sample(
+        toutes_positions,
+        nombre
     )
 
-    print(
-        "  Ecart de pointage : %.2f carreaux (%.1f cm)"
-        % (
-            ecart,
-            ecart * COTE_CARREAU
+
+# =========================================================
+# 10. ENREGISTREMENT CSV
+# =========================================================
+
+def initialiserFichierCampagne():
+    """
+    Cree le fichier CSV et ecrit l'en-tete s'il est nouveau.
+    """
+
+    os.makedirs(
+        DOSSIER_RESULTATS,
+        exist_ok=True
+    )
+
+    nouveau = not os.path.exists(
+        FICHIER_CAMPAGNE
+    )
+
+    if nouveau:
+
+        with open(
+            FICHIER_CAMPAGNE,
+            "w",
+            newline=""
+        ) as fichier:
+
+            redacteur = csv.writer(
+                fichier
+            )
+
+            redacteur.writerow(
+                ENTETE_CAMPAGNE
+            )
+
+
+def enregistrerResultat(
+    numero,
+    demande,
+    erreur_predite,
+    cible_corrigee,
+    angles_consigne,
+    angles_atteints,
+    temps_deplacement,
+    position_atteinte,
+    reel
+):
+    """
+    Enregistre toutes les informations d'un point dans le CSV.
+    """
+
+    if reel is None:
+
+        x_mesure = ""
+        y_mesure = ""
+        erreur_x = ""
+        erreur_y = ""
+        erreur_totale = ""
+
+    else:
+
+        x_mesure = reel[0]
+        y_mesure = reel[1]
+
+        erreur_x = (
+            x_mesure
+            - demande[0]
         )
-    )
 
-    return reel
+        erreur_y = (
+            y_mesure
+            - demande[1]
+        )
+
+        erreur_totale = (
+            (
+                erreur_x ** 2
+                +
+                erreur_y ** 2
+            ) ** 0.5
+        )
+
+    with open(
+        FICHIER_CAMPAGNE,
+        "a",
+        newline=""
+    ) as fichier:
+
+        redacteur = csv.writer(
+            fichier
+        )
+
+        redacteur.writerow([
+            datetime.now().isoformat(
+                timespec="seconds"
+            ),
+
+            numero,
+
+            round(
+                demande[0],
+                5
+            ),
+
+            round(
+                demande[1],
+                5
+            ),
+
+            round(
+                erreur_predite[0],
+                5
+            ),
+
+            round(
+                erreur_predite[1],
+                5
+            ),
+
+            round(
+                cible_corrigee[0],
+                5
+            ),
+
+            round(
+                cible_corrigee[1],
+                5
+            ),
+
+            round(
+                angles_consigne[0],
+                5
+            ),
+
+            round(
+                angles_consigne[1],
+                5
+            ),
+
+            round(
+                angles_atteints[0],
+                5
+            ),
+
+            round(
+                angles_atteints[1],
+                5
+            ),
+
+            round(
+                temps_deplacement,
+                5
+            ),
+
+            int(
+                position_atteinte
+            ),
+
+            x_mesure,
+            y_mesure,
+            erreur_x,
+            erreur_y,
+            erreur_totale,
+        ])
 
 
 # =========================================================
@@ -1090,13 +982,7 @@ def tracerErreurs3D(
     donnees
 ):
     """
-    Trace deux courbes 3D :
-        1) erreur X
-        2) erreur Y
-
-    Abscisse  = X visee
-    Profondeur = Y visee
-    Hauteur = erreur
+    Trace les erreurs mesurees pendant la campagne.
     """
 
     if not donnees:
@@ -1136,10 +1022,6 @@ def tracerErreurs3D(
         )
     )
 
-    # -----------------------------------------------------
-    # Erreur X
-    # -----------------------------------------------------
-
     ax1 = fig.add_subplot(
         121,
         projection="3d"
@@ -1168,10 +1050,6 @@ def tracerErreurs3D(
     ax1.set_title(
         "Erreur X = X mesuree - X visee"
     )
-
-    # -----------------------------------------------------
-    # Erreur Y
-    # -----------------------------------------------------
 
     ax2 = fig.add_subplot(
         122,
@@ -1206,12 +1084,11 @@ def tracerErreurs3D(
 
     print()
     print(
-        "Affichage des courbes 3D..."
+        "Affichage des courbes 3D."
     )
 
     print(
-        "Fermer la fenetre graphique "
-        "pour terminer le programme."
+        "Fermer la fenetre pour terminer."
     )
 
     plt.show()
@@ -1228,7 +1105,7 @@ def main():
     )
 
     print(
-        "TEST DE LA CALIBRATION - CALIB 2"
+        "CAMPAGNE ALEATOIRE - CALIB 2"
     )
 
     print(
@@ -1250,7 +1127,7 @@ def main():
     )
 
     # -----------------------------------------------------
-    # Construction de Calib 2
+    # Reconstruction de Calib 2
     # -----------------------------------------------------
 
     print()
@@ -1285,66 +1162,66 @@ def main():
         )
     )
 
-    residus = modele.get(
-        "residus"
-    )
-
-    if residus:
-
-        print(
-            "Erreur ajustement : "
-            "rms %.2f carreaux, max %.2f carreaux"
-            % (
-                residus["rms_carreaux"],
-                residus["max_carreaux"]
-            )
-        )
-
-    residus_validation = modele.get(
-        "residus_validation"
-    )
-
-    if residus_validation:
-
-        print(
-            "Erreur validation : "
-            "rms %.2f carreaux, max %.2f carreaux"
-            % (
-                residus_validation["rms_carreaux"],
-                residus_validation["max_carreaux"]
-            )
-        )
-
-    else:
-
-        print(
-            "Pas de validation pour Calib 2."
-        )
-
     # -----------------------------------------------------
-    # Chargement du modele de correction
+    # Chargement correction
     # -----------------------------------------------------
 
     modele_correction = (
         chargerModeleCorrection()
     )
 
-    print()
+    # -----------------------------------------------------
+    # Nombre de positions
+    # -----------------------------------------------------
 
-    if modele_correction is None:
-
-        print(
-            ">>> CIBLAGE SANS CORRECTION APPRENTIE <<<"
-        )
-
-    else:
-
-        print(
-            ">>> CIBLAGE AVEC CORRECTION APPRENTIE <<<"
-        )
+    nombre_positions = (
+        demanderNombrePositions()
+    )
 
     # -----------------------------------------------------
-    # Connexion au robot
+    # Generation aleatoire
+    # -----------------------------------------------------
+
+    try:
+
+        positions = genererPositionsAleatoires(
+            modele,
+            nombre_positions
+        )
+
+    except Exception as e:
+
+        print(
+            "ERREUR generation positions :",
+            e
+        )
+
+        return 1
+
+    print()
+    print(
+        "%d positions aleatoires generees."
+        % len(positions)
+    )
+
+    # -----------------------------------------------------
+    # Initialisation CSV
+    # -----------------------------------------------------
+
+    initialiserFichierCampagne()
+
+    print()
+    print(
+        "Les resultats seront enregistres dans :"
+    )
+
+    print(
+        " ",
+        FICHIER_CAMPAGNE
+    )
+
+    # -----------------------------------------------------
+    # Connexion robot
     # -----------------------------------------------------
 
     mc = connecterRobot()
@@ -1384,80 +1261,48 @@ def main():
         5
     ]
 
-    print()
-
-    print(
-        "Les mesures seront enregistrees dans :"
-    )
-
-    print(
-        " ",
-        FICHIER_VALIDATION
-    )
-
-    print()
-
-    print(
-        "Les mesures d'apprentissage seront "
-        "enregistrees dans :"
-    )
-
-    print(
-        " ",
-        FICHIER_APPRENTISSAGE
-    )
-
     donnees_graphique = []
+
+    # =====================================================
+    # BOUCLE PRINCIPALE
+    # =====================================================
 
     try:
 
-        if not allumerPointeur(
+        # Le laser est explicitement eteint au depart.
+        eteindrePointeur(
             mc
+        )
+
+        for numero, demande in enumerate(
+            positions,
+            1
         ):
 
+            print()
+            print()
             print(
-                "Le pointeur ne s'allume pas."
+                "========================================="
             )
 
-        # =================================================
-        # BOUCLE DE CIBLAGE
-        # =================================================
-
-        while True:
-
-            demande = lireCible()
-
-            # -------------------------------------------------
-            # FIN
-            # -------------------------------------------------
-
-            if demande is None:
-
-                print()
-                print(
-                    "Fin de la campagne de mesure."
+            print(
+                "POSITION %d / %d"
+                % (
+                    numero,
+                    len(positions)
                 )
+            )
 
-                tracerErreurs3D(
-                    donnees_graphique
-                )
-
-                break
-
-            # -------------------------------------------------
-            # CIBLE ORIGINALE
-            # -------------------------------------------------
+            print(
+                "========================================="
+            )
 
             x = demande[0]
             y = demande[1]
 
             print()
             print(
-                "-----------------------------------------"
-            )
-
-            print(
-                "Cible demandee : "
+                "Position demandee : "
                 "X = %+.3f   Y = %+.3f carreaux"
                 % (
                     x,
@@ -1466,42 +1311,8 @@ def main():
             )
 
             # -------------------------------------------------
-            # Verification de l'enveloppe sur la cible
-            # originale.
+            # Correction
             # -------------------------------------------------
-
-            if not dansEnveloppe(
-                modele,
-                x,
-                y
-            ):
-
-                e = modele[
-                    "enveloppe"
-                ]
-
-                print(
-                    "  Point hors de la zone de "
-                    "Calib 2."
-                )
-
-                print(
-                    "  Zone autorisee : "
-                    "x %.1f..%.1f, "
-                    "y %.1f..%.1f carreaux."
-                    % (
-                        e["u_min"],
-                        e["u_max"],
-                        e["v_min"],
-                        e["v_max"]
-                    )
-                )
-
-                continue
-
-            # =================================================
-            # CORRECTION APPRENTIE
-            # =================================================
 
             (
                 erreur_x_predite,
@@ -1512,54 +1323,38 @@ def main():
                 y
             )
 
-            x_corrige = (
-                x
-                - erreur_x_predite
-            )
-
-            y_corrige = (
+            (
+                x_corrige,
+                y_corrige,
+                _,
+                _
+            ) = corrigerCible(
+                modele_correction,
+                x,
                 y
-                - erreur_y_predite
             )
 
-            if modele_correction is None:
-
-                print()
-                print(
-                    "Aucun modele de correction applique."
+            print()
+            print(
+                "Erreur predite : "
+                "X = %+.3f   Y = %+.3f carreaux"
+                % (
+                    erreur_x_predite,
+                    erreur_y_predite
                 )
+            )
 
-            else:
-
-                print()
-                print(
-                    "Correction apprise :"
+            print(
+                "Position corrigee : "
+                "X = %+.3f   Y = %+.3f carreaux"
+                % (
+                    x_corrige,
+                    y_corrige
                 )
-
-                print(
-                    "  Erreur X predite : "
-                    "%+.3f carreaux"
-                    % erreur_x_predite
-                )
-
-                print(
-                    "  Erreur Y predite : "
-                    "%+.3f carreaux"
-                    % erreur_y_predite
-                )
-
-                print()
-                print(
-                    "Cible corrigee : "
-                    "X = %+.3f   Y = %+.3f carreaux"
-                    % (
-                        x_corrige,
-                        y_corrige
-                    )
-                )
+            )
 
             # -------------------------------------------------
-            # Verification de l'enveloppe de la cible corrigee
+            # Verification enveloppe cible corrigee
             # -------------------------------------------------
 
             if not dansEnveloppe(
@@ -1570,20 +1365,19 @@ def main():
 
                 print()
                 print(
-                    "ATTENTION : la cible corrigee sort "
-                    "de l'enveloppe de Calib 2."
+                    "ATTENTION : la position corrigee sort "
+                    "de l'enveloppe."
                 )
 
                 print(
-                    "Tir annule pour eviter "
-                    "une extrapolation."
+                    "Tir ignore."
                 )
 
                 continue
 
-            # =================================================
-            # CALCUL DES ANGLES
-            # =================================================
+            # -------------------------------------------------
+            # Calcul angles
+            # -------------------------------------------------
 
             resultat = anglesPourPoint(
                 modele,
@@ -1594,8 +1388,7 @@ def main():
             if resultat is None:
 
                 print(
-                    "Impossible de calculer J4/J5 "
-                    "pour la cible corrigee."
+                    "Impossible de calculer les angles."
                 )
 
                 continue
@@ -1604,22 +1397,42 @@ def main():
 
             print()
             print(
-                "Angles calcules sur la cible corrigee :"
+                "Consigne angulaire :"
             )
 
             print(
-                "  J4 = %+.2f"
+                "  J4 = %+.2f deg"
                 % j4
             )
 
             print(
-                "  J5 = %+.2f"
+                "  J5 = %+.2f deg"
                 % j5
             )
 
-            # =================================================
-            # POSITIONNEMENT AVEC RATTRAPAGE
-            # =================================================
+            # -------------------------------------------------
+            # SECURITE :
+            # laser eteint avant chaque mouvement.
+            # -------------------------------------------------
+
+            eteindrePointeur(
+                mc
+            )
+
+            print()
+            print(
+                "Laser eteint."
+            )
+
+            print(
+                "Deplacement en cours..."
+            )
+
+            # -------------------------------------------------
+            # CHRONOMETRAGE DU DEPLACEMENT
+            # -------------------------------------------------
+
+            debut = time.perf_counter()
 
             vise, mesure = viserAngles(
                 mc,
@@ -1629,133 +1442,357 @@ def main():
                 j6
             )
 
+            fin = time.perf_counter()
+
+            temps_deplacement = (
+                fin - debut
+            )
+
+            # -------------------------------------------------
+            # Mouvement echoue
+            # -------------------------------------------------
+
             if mesure is None:
 
+                print()
                 print(
                     "Mouvement echoue."
                 )
 
+                print(
+                    "Temps de deplacement : %.3f s"
+                    % temps_deplacement
+                )
+
+                enregistrerResultat(
+                    numero,
+                    demande,
+                    (
+                        erreur_x_predite,
+                        erreur_y_predite
+                    ),
+                    (
+                        x_corrige,
+                        y_corrige
+                    ),
+                    (
+                        j4,
+                        j5
+                    ),
+                    (
+                        float("nan"),
+                        float("nan")
+                    ),
+                    temps_deplacement,
+                    False,
+                    None
+                )
+
+                # Laser reste eteint.
+                eteindrePointeur(
+                    mc
+                )
+
                 continue
+
+            # -------------------------------------------------
+            # Temps de mouvement
+            # -------------------------------------------------
+
+            print()
+            print(
+                "Temps de deplacement : %.3f secondes"
+                % temps_deplacement
+            )
+
+            print(
+                "Angles atteints : "
+                "J4 = %+.2f   J5 = %+.2f"
+                % (
+                    mesure[3],
+                    mesure[4]
+                )
+            )
+
+            # -------------------------------------------------
+            # VERIFICATION ATTEINTE
+            # -------------------------------------------------
 
             if not vise:
 
                 print()
+                print(
+                    "ATTENTION : la position demandee "
+                    "n'a pas ete atteinte dans la tolerance."
+                )
 
                 print(
-                    "ATTENTION : la tete se repose "
-                    "a %+.2f / %+.2f deg de l'angle demande."
+                    "Le laser reste ETEINT."
+                )
+
+                print(
+                    "Ecart angulaire : "
+                    "J4 = %+.3f deg / J5 = %+.3f deg"
                     % (
                         mesure[3] - j4,
                         mesure[4] - j5
                     )
                 )
 
-                print(
-                    "Tolerance : %.2f deg."
-                    % TOLERANCE_POINTAGE
+                # Securite supplementaire.
+                eteindrePointeur(
+                    mc
                 )
 
-            # =================================================
-            # PREDICTION DU MODELE GEOMETRIQUE
-            # =================================================
-
-            prediction = predireImpact(
-                modele,
-                mesure[3],
-                mesure[4]
-            )
-
-            if prediction is not None:
-
-                print()
-                print(
-                    "Prediction geometrique sur les "
-                    "angles atteints :"
-                )
-
-                print(
-                    "  X = %+.3f"
-                    % prediction[0]
-                )
-
-                print(
-                    "  Y = %+.3f"
-                    % prediction[1]
-                )
-
-            # =================================================
-            # MESURE DU SPOT REEL
-            # =================================================
-
-            reel = lireImpactReel(
-                demande
-            )
-
-            # =================================================
-            # APPRENTISSAGE
-            # =================================================
-
-            if reel is not None:
-
-                # -------------------------------------------------
-                # IMPORTANT :
-                # la comparaison se fait avec la cible originale.
-                # -------------------------------------------------
-
-                erreur_x_reelle = (
-                    reel[0]
-                    - x
-                )
-
-                erreur_y_reelle = (
-                    reel[1]
-                    - y
-                )
-
-                print()
-                print(
-                    "Erreur reellement mesuree :"
-                )
-
-                print(
-                    "  Erreur X = %+.3f carreaux"
-                    % erreur_x_reelle
-                )
-
-                print(
-                    "  Erreur Y = %+.3f carreaux"
-                    % erreur_y_reelle
-                )
-
-                # Donnees pour les deux graphiques 3D.
-                donnees_graphique.append({
-                    "x_vise": x,
-                    "y_vise": y,
-                    "x_mesure": reel[0],
-                    "y_mesure": reel[1],
-                })
-
-                # Donnees pour un futur apprentissage.
-                enregistrerMesureApprentissage(
+                enregistrerResultat(
+                    numero,
                     demande,
-                    reel
+                    (
+                        erreur_x_predite,
+                        erreur_y_predite
+                    ),
+                    (
+                        x_corrige,
+                        y_corrige
+                    ),
+                    (
+                        j4,
+                        j5
+                    ),
+                    (
+                        mesure[3],
+                        mesure[4]
+                    ),
+                    temps_deplacement,
+                    False,
+                    None
                 )
 
+                continue
+
             # =================================================
-            # ENREGISTREMENT DE VALIDATION
+            # ROBOT ARRIVE :
+            # ALLUMER LE LASER MAINTENANT SEULEMENT
             # =================================================
 
-            enregistrerTir(
+            print()
+            print(
+                "Position atteinte."
+            )
+
+            print(
+                "Laser allume."
+            )
+
+            laser_ok = allumerPointeur(
+                mc
+            )
+
+            if not laser_ok:
+
+                print(
+                    "ATTENTION : impossible d'allumer le laser."
+                )
+
+                enregistrerResultat(
+                    numero,
+                    demande,
+                    (
+                        erreur_x_predite,
+                        erreur_y_predite
+                    ),
+                    (
+                        x_corrige,
+                        y_corrige
+                    ),
+                    (
+                        j4,
+                        j5
+                    ),
+                    (
+                        mesure[3],
+                        mesure[4]
+                    ),
+                    temps_deplacement,
+                    True,
+                    None
+                )
+
+                continue
+
+            # -------------------------------------------------
+            # Mesure du spot
+            # -------------------------------------------------
+
+            print()
+            print(
+                "Le laser est maintenant allume."
+            )
+
+            print(
+                "Mesurer la position du spot."
+            )
+
+            while True:
+
+                reponse = input(
+                    "Position mesuree X Y > "
+                ).strip()
+
+                if not reponse:
+
+                    print(
+                        "  Une mesure est necessaire."
+                    )
+
+                    continue
+
+                morceaux = (
+                    reponse
+                    .replace(
+                        ",",
+                        " "
+                    )
+                    .split()
+                )
+
+                if len(morceaux) != 2:
+
+                    print(
+                        "  Entrer deux nombres."
+                    )
+
+                    continue
+
+                try:
+
+                    x_mesure = float(
+                        morceaux[0]
+                    )
+
+                    y_mesure = float(
+                        morceaux[1]
+                    )
+
+                    reel = (
+                        x_mesure,
+                        y_mesure
+                    )
+
+                    break
+
+                except ValueError:
+
+                    print(
+                        "  Saisie illisible."
+                    )
+
+            # -------------------------------------------------
+            # ERREUR REELLE
+            # -------------------------------------------------
+
+            erreur_x_reelle = (
+                reel[0]
+                - x
+            )
+
+            erreur_y_reelle = (
+                reel[1]
+                - y
+            )
+
+            erreur_totale = (
+                (
+                    erreur_x_reelle ** 2
+                    +
+                    erreur_y_reelle ** 2
+                ) ** 0.5
+            )
+
+            print()
+            print(
+                "Position mesuree : "
+                "X = %+.3f   Y = %+.3f"
+                % (
+                    reel[0],
+                    reel[1]
+                )
+            )
+
+            print(
+                "Erreur X : %+.3f carreaux"
+                % erreur_x_reelle
+            )
+
+            print(
+                "Erreur Y : %+.3f carreaux"
+                % erreur_y_reelle
+            )
+
+            print(
+                "Erreur totale : %.3f carreaux"
+                % erreur_totale
+            )
+
+            # -------------------------------------------------
+            # Sauvegarde graphique
+            # -------------------------------------------------
+
+            donnees_graphique.append({
+                "x_vise": x,
+                "y_vise": y,
+                "x_mesure": reel[0],
+                "y_mesure": reel[1],
+            })
+
+            # -------------------------------------------------
+            # CSV
+            # -------------------------------------------------
+
+            enregistrerResultat(
+                numero,
                 demande,
+                (
+                    erreur_x_predite,
+                    erreur_y_predite
+                ),
+                (
+                    x_corrige,
+                    y_corrige
+                ),
+                (
+                    j4,
+                    j5
+                ),
                 (
                     mesure[3],
                     mesure[4]
                 ),
-                reel,
-                chemin=FICHIER_VALIDATION
+                temps_deplacement,
+                True,
+                reel
+            )
+
+            # -------------------------------------------------
+            # IMPORTANT :
+            # extinction du laser AVANT le point suivant.
+            # -------------------------------------------------
+
+            eteindrePointeur(
+                mc
+            )
+
+            print()
+            print(
+                "Laser eteint."
             )
 
     finally:
+
+        # -----------------------------------------------------
+        # SECURITE :
+        # le laser doit etre eteint quoi qu'il arrive.
+        # -----------------------------------------------------
 
         eteindrePointeur(
             mc
@@ -1763,32 +1800,37 @@ def main():
 
         print()
         print(
-            "Pointeur eteint. "
-            "Moteurs laisses sous tension."
+            "========================================="
         )
 
         print(
-            "Calibration utilisee :",
-            SERIE
+            "FIN DE LA CAMPAGNE"
         )
 
         print(
-            "Tirs enregistres dans :"
+            "Laser eteint."
         )
 
         print(
-            " ",
-            FICHIER_VALIDATION
-        )
-
-        print(
-            "Apprentissage disponible dans :"
+            "Resultats enregistres dans :"
         )
 
         print(
             " ",
-            FICHIER_APPRENTISSAGE
+            FICHIER_CAMPAGNE
         )
+
+        print(
+            "========================================="
+        )
+
+    # -----------------------------------------------------
+    # Graphiques
+    # -----------------------------------------------------
+
+    tracerErreurs3D(
+        donnees_graphique
+    )
 
     return 0
 
