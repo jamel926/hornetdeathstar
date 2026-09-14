@@ -4,7 +4,7 @@ from camera.ModuleCam.ModuleCamera import LaCamera
 from camera.ModuleCam.Calibrage import CoordenéesAuRobo, CoordonnerCalibrage
 
 # Load YOLOv8 model
-model = YOLO("src/camera/IA/Model5 - V2/runs/detect/train/weights/best.pt")
+model = YOLO("camera/IA/Model5 - V2/runs/detect/train/weights/best.pt")
 
 distanceHaut = 12   # En cm
 distanceCote = 11
