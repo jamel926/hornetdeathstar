@@ -180,50 +180,73 @@ def Mise_en_Position_Initiale(vitesse=VITESSE_INIT, utilisateur = bool):
     return True
 
 
-def danse_victoire(mc, vitesse=50):
+def danse_victoire(mc, vitesse=100):
     """
-    Petite danse de victoire apres l'extinction du laser.
-    Les mouvements restent volontairement limites a J1, J2 et J6.
-    J3, J4 et J5 conservent leur position.
+    Danse de victoire rapide et marrante.
+    Tous les moteurs sauf J6 bougent.
+    J6 reste a 0 degre.
     """
     print()
     print("=========================================")
-    print("        DANSE DE VICTOIRE !")
+    print("     DANSE DE VICTOIRE RAPIDE !!!")
     print("=========================================")
 
-    angles_depart = lireAngles(mc)
+    # Choregraphie volontairement dynamique.
+    # J6 reste toujours a 0.
 
-    if angles_depart is None or len(angles_depart) != 6:
-        print("Impossible de lire les angles : danse annulee.")
-        return False
-
-    # Les valeurs de depart sont conservees pour J3, J4 et J5.
-    j3 = float(angles_depart[2])
-    j4 = float(angles_depart[3])
-    j5 = float(angles_depart[4])
-
-    # Petite chorégraphie : mouvements alternes de la base,
-    # de l'epaule et de la rotation finale de l'outil.
     poses = [
-        [ -20.0, 40.0, j3, j4, j5, -30.0],
-        [  20.0, 60.0, j3, j4, j5,  30.0],
-        [ -20.0, 60.0, j3, j4, j5, -30.0],
-        [  20.0, 40.0, j3, j4, j5,  30.0],
-        [   0.0, 50.0, j3, j4, j5,   0.0],
+        # Pose 1 : "Bras en l'air"
+        [-50, 75, -120,  50,  35, 0],
+
+        # Pose 2 : "À gauche"
+        [ 50, 55,  -90, -50, -35, 0],
+
+        # Pose 3 : "Le robot complètement penché"
+        [-45, 25,  -140,  45, -40, 0],
+
+        # Pose 4 : "À droite"
+        [ 55, 70,  -80, -55,  40, 0],
+
+        # Pose 5 : "Victory !"
+        [  0, 80, -100,  60,  45, 0],
+
+        # Pose 6 : "Rock'n'roll"
+        [-55, 45,   70, -50,  40, 0],
+
+        # Pose 7 : "L'autre côté"
+        [ 55, 45,   70,  50, -30, 0],
+
+        # Pose 8 : "Le robot fou"
+        [  0, 30, -145, -50,  45, 0],
+
+        # Pose 9 : "Super héros"
+        [-40, 80,  -60,  60, -25, 0],
+
+        # Pose 10 : "TA-DAAAA !"
+        [  0, 70,   0,   0,  45, 0],
     ]
 
-    try:
-        for i, pose in enumerate(poses, start=1):
-            print("Mouvement", i, "/", len(poses), ":", pose)
-            mc.send_angles(pose, int(vitesse), 3)
-            time.sleep(0.8)
 
-        print("Danse de victoire terminee !")
+    try:
+        for tour in range(2):
+            print("Tour de danse", tour + 1, "/ 2")
+
+            for i, pose in enumerate(poses, start=1):
+                print("  Move", i, "->", pose)
+
+                # 100 = vitesse rapide.
+                mc.send_angles(pose, int(vitesse), 2)
+
+                # Temps tres court pour donner un effet dynamique.
+                time.sleep(0.25)
+
+        print("DANSE TERMINEE !!!")
         return True
 
     except Exception as e:
         print("Erreur pendant la danse de victoire :", e)
         return False
+
 
 def main():
     mc = MyCobot280('/dev/ttyTHS1', 1000000)
@@ -282,7 +305,7 @@ def main():
     time.sleep(1)
 
     # Une fois le laser eteint, le robot fait sa danse de victoire.
-    danse_victoire(mc, 100)
+    danse_victoire(mc, 75)
     time.sleep(1)
 
     print("Fin du laser, merci bonsoir")
