@@ -98,7 +98,20 @@ from referencement import referencer
 
 from calibration_grille import lireAngles
 
-import test_calibrage_v2.py
+"""
+Sans l'extension. `import a.b` cherche un sous-module b dans
+un paquet a : ecrire `import test_calibrage_v2.py` fait
+chercher a Python un paquet nomme test_calibrage_v2 contenant
+un module py, et sort
+
+    No module named 'test_calibrage_v2.py';
+    'test_calibrage_v2' is not a package
+
+Le nom du module est celui du fichier SANS le .py. Si cet
+import echoue vraiment, lancer autotest.py : il dit si le
+fichier est absent, ailleurs, ou casse a l'interieur.
+"""
+import test_calibrage_v2
 
 
 # =========================================================
