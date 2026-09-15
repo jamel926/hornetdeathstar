@@ -98,6 +98,7 @@ from referencement import referencer
 
 from calibration_grille import lireAngles
 
+<<<<<<< HEAD
 # Permet d'importer le programme de Calibration_v2
 CHEMIN_V2 = os.path.abspath(
     os.path.join(
@@ -110,7 +111,21 @@ CHEMIN_V2 = os.path.abspath(
 if CHEMIN_V2 not in sys.path:
     sys.path.insert(0, CHEMIN_V2)
 
+"""
+Sans l'extension. `import a.b` cherche un sous-module b dans
+un paquet a : ecrire `import test_calibrage_v2.py` fait
+chercher a Python un paquet nomme test_calibrage_v2 contenant
+un module py, et sort
+
+    No module named 'test_calibrage_v2.py';
+    'test_calibrage_v2' is not a package
+
+Le nom du module est celui du fichier SANS le .py. Si cet
+import echoue vraiment, lancer autotest.py : il dit si le
+fichier est absent, ailleurs, ou casse a l'interieur.
+"""
 import test_calibrage_v2
+
 
 # =========================================================
 # 2. LE DECALAGE DE LA SEANCE
