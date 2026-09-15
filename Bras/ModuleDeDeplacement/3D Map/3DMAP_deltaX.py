@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import plotly.graph_objects as go
 
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
@@ -9,7 +10,7 @@ from sklearn.metrics import r2_score
 # ==========================================================
 # PARAMETRES
 # ==========================================================
-df = pd.read_csv("/Users/maellechevennement/Documents/apprentissage_erreurs.csv")
+df = pd.read_csv("Bras/ModuleDeDeplacement/resultats/apprentissage_erreurs.csv")
 DEGRE_MAX = 5     # degré maximal testé
 
 # ==========================================================
@@ -110,9 +111,6 @@ Zg = Zg.reshape(Xg.shape)
 # =====================================================
 # AFFICHAGE INTERACTIF PLOTLY
 # =====================================================
-
-import plotly.graph_objects as go
-
 
 fig = go.Figure()
 
