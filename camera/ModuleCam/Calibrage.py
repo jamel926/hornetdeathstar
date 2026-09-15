@@ -2,28 +2,23 @@ import cv2
 import numpy as np
 
 
-def CoordonnerCalibrage(image, D1, D2):  #Fonction de calibrage pour definir un nouveau répère au niveau des quatre coins rouges autour du carré utile #Elle prends l'image originale, la distance entre les coins
-#Elle donne deux listes, la première avec les coef de proportion et la deuxième avec les coordenés d'origine
 
+def CoordonnerCalibrage(image, D1, D2):  #Fonction de calibrage pour definir un nouveau répère au niveau des quatre coins rouges autour du carré utile #Elle prends 
+#l'image originale, la distance entre les coins
+#Elle donne deux listes, la première avec les coef de proportion et la deuxième avec les coordenés d'origine
+        image = cv2.imread(image)
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV) #Bleu,Green,Red -> Hue, saturation, 
         
 
         # 2. Détecter les coins rouges (plages HSV pour le rouge)
-        lower_red1 = np.array([0, 90, 80])
+        lower_red1 = np.array([0, 80, 60])
         upper_red1 = np.array([15, 255, 255])
-
-        lower_red2 = np.array([165, 90, 80])
+        lower_red2 = np.array([165, 80, 60])
         upper_red2 = np.array([180, 255, 255])
 
         mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
         mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
         mask = mask1 | mask2
-
-        cv2.imshow("Image originale", image)
-        cv2.imshow("Masque rouge", mask)
-
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
 
         # Trouver les contours des objets rouges pour extraire leurs centres (les coins)
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -31,7 +26,7 @@ def CoordonnerCalibrage(image, D1, D2):  #Fonction de calibrage pour definir un 
 
 
         for c in contours:
-            if cv2.contourArea(c) > 5:  # Filtrer le bruit
+            if cv2.contourArea(c) > 3:  # Filtrer le bruit
                 M = cv2.moments(c)
                 if M["m00"] != 0:
                     cX = int(M["m10"] / M["m00"])
@@ -61,29 +56,44 @@ def CoordonnerCalibrage(image, D1, D2):  #Fonction de calibrage pour definir un 
             x_o = int(tl[0])
             y_o = int(tl[1])
 
-            return [float(dist_top), float(dist_right), float(dist_bottom), float(dist_left)],[float(x_o), float(y_o)]
+            return [float(dist_top), float(dist_right), float(dist_bottom), float(dist_left)],[float(x_o), float(y_o)], pts_src
 
         else:
-             return(None, None)
+            print("Erreur : Moins de 4 coins rouges ont été détectés.")
+            return None, None, None
 
-def CoordonneesAuRobo(coef, CoordDorigine, CoordPointIA): #Fonction pour calculer les coordenées à envoyer au robo. Elle prends la liste des coeficients, la listedes coordenées de l'origine (x_0, y_0) et la liste de coordenées du point decteté par l'IA 
-    x = ((CoordPointIA[0]-CoordDorigine[0]) / coef[0])
-    y = (CoordDorigine[1] - CoordPointIA[1]) / coef[1]
-    return (x, y)
+def CoordenéesAuRobo(coef, CoordDorigine, CoordPointIA): #Fonction pour calculer les coordenées à envoyer au robo. Elle prends la liste des coeficients, la liste des coordenées de l'origine (x_0, y_0) et la liste de coordenées du point decteté par l'IA 
+        return [abs((CoordPointIA[0]-CoordDorigine[0]) / coef[0]), abs((CoordPointIA[1]-CoordDorigine[1]) / coef[1])]
             
-   # # 4. Enlever tout ce qui est à l'extérieur (recadrage par perspective)
-   # width = max(int(dist_top), int(dist_bottom))
-   # height = max(int(dist_left), int(dist_right))
+def debbugCalibrage(coefProportion, image_input, pts_src, para=True):
+    # Charger l'image si un chemin est fourni
+    if isinstance(image_input, str):
+        image = cv2.imread(image_input)
+    else:
+        image = image_input
+
+    # Récupérer les coordonnées minimales et maximales des 4 coins
+    x_min = int(np.min(pts_src[:, 0]))
+    x_max = int(np.max(pts_src[:, 0]))
+    y_min = int(np.min(pts_src[:, 1]))
+    y_max = int(np.max(pts_src[:, 1]))
+
+    # Découper l'image pour supprimer tout ce qui dépasse
+    cropped = image[y_min:y_max, x_min:x_max]
+
+    # Sauvegarder l'image rognée
+    cv2.imwrite('C:/Users/Eleves/Documents/MagroHornetDeathStar/Carre_extrait.jpg', cropped)
+    print("Image rognée sauvegardée avec succès !")
+
+
+def main():
+    coefProportion, CoordDorigine, pts_src = CoordonnerCalibrage("C:/Users/Eleves/Downloads/KimiMercedez.png", 70.5, 82.5)
     
-   # pts_dst = np.array([
-   #     [0, 0],
-   #     [width - 1, 0],
-   #     [width - 1, height - 1],
-   #     [0, height - 1]], dtype="float32")
+    # 1. Sécurité : On vérifie que la détection a fonctionné
+    if pts_src is None:
+        print("Calibrage impossible : les 4 coins rouges n'ont pas été détectés.")
+        return
 
-  
-   # matrix = cv2.getPerspectiveTransform(pts_src, pts_dst)
-   # warped = cv2.warpPerspective(image, matrix, (width, height))
-
-    # Sauvegarder le résultat (extension .jpg ou .png obligatoire)
-    #cv2.imwrite('C:/Users/Eleves/Documents/MagroHornetDeathStar/Carre_extrait.jpg', warped)
+    # 2. On lance le débogage uniquement si pts_src existe
+    debbugCalibrage(coefProportion, "C:/Users/Eleves/Downloads/KimiMercedez.png", pts_src, True)
+main()
