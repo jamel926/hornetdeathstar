@@ -97,6 +97,96 @@ for chemin in (DOSSIER_V2, DOSSIER_PARENT):
         sys.path.insert(0, chemin)
 
 
+# =========================================================
+# 1 bis. VERIFICATION DE L'INSTALLATION
+# =========================================================
+
+"""
+Le v3 ne tient pas tout seul : il a besoin du dossier
+Calibration_v2 a cote de lui, et des scripts d'origine un
+cran au dessus.
+
+Sans cette verification, un fichier absent sort un
+"ModuleNotFoundError: No module named 'test_calibrage_v2'"
+qui ne dit ni ou Python a cherche, ni ce qu'il faut faire.
+Avec, on sait en une ligne si c'est un git pull qui manque
+ou un dossier deplace.
+"""
+
+DEPENDANCES = [
+    (os.path.join(DOSSIER_V2, "modele_v2.py"), "noyau v2"),
+    (os.path.join(DOSSIER_V2, "test_calibrage_v2.py"), "campagne de tirs v2"),
+    (os.path.join(DOSSIER_V2, "suivi_frelon_v2.py"), "suivi v2"),
+    (os.path.join(DOSSIER_V2, "recalibration_tirs.py"), "ajustement v2"),
+    (os.path.join(DOSSIER_PARENT, "calibration_grille.py"), "modele geometrique"),
+    (os.path.join(DOSSIER_PARENT, "suivi_frelon.py"), "suivi d'origine"),
+]
+
+
+def fichiersManquants():
+    """Retourne la liste des dependances absentes, sous forme de couples (chemin, role)."""
+
+    return [(c, role) for c, role in DEPENDANCES if not os.path.exists(c)]
+
+
+def diagnostiquerInstallation():
+    """Retourne un texte expliquant ce qui manque et ou on l'a cherche, ou None si tout est la."""
+
+    manquants = fichiersManquants()
+
+    if not manquants:
+        return None
+
+    lignes = [
+        "",
+        "=" * 57,
+        "INSTALLATION INCOMPLETE",
+        "=" * 57,
+        "",
+        "Le v3 s'appuie sur Calibration_v2 et sur les scripts",
+        "d'origine. Ceci est introuvable :",
+        "",
+    ]
+
+    for chemin, role in manquants:
+        lignes.append("  %-22s %s" % (role, chemin))
+
+    lignes += [
+        "",
+        "Dossiers ou on a cherche :",
+        "  v3      %s" % DOSSIER,
+        "  v2      %s" % DOSSIER_V2,
+        "  scripts %s" % DOSSIER_PARENT,
+        "",
+        "A verifier, dans cet ordre :",
+        "  1. git pull   (le dossier Calibration_v2 est-il arrive ?)",
+        "  2. Calibration_v2 est-il bien A COTE de Calibration_v3,",
+        "     tous les deux dans Bras/ModuleDeDeplacement/ ?",
+        "  3. lancer depuis le dossier Calibration_v3 :",
+        "         cd Bras/ModuleDeDeplacement/Calibration_v3",
+        "         python3 test_calibrage_v3.py",
+        "",
+    ]
+
+    return "\n".join(lignes)
+
+
+"""
+On refuse l'import des qu'une dependance manque, avec le
+detail. Le diagnostic complet, lui, vit dans autotest.py :
+un outil qui sert quand l'installation est cassee ne doit
+dependre de rien, surtout pas de ce fichier.
+"""
+
+_diagnostic = diagnostiquerInstallation()
+
+if _diagnostic is not None:
+    print(_diagnostic)
+    raise ImportError(
+        "Calibration_v2 introuvable depuis %s -- voir le detail ci-dessus." % DOSSIER
+    )
+
+
 """
 Reexport du noyau v2. Les scripts v3 importent tout depuis
 ici : ils n'ont jamais a savoir que le v2 existe, et le jour
@@ -330,3 +420,4 @@ def sensibilite(modele, j4, j5):
         math.hypot(voisin_j4[0] - origine[0], voisin_j4[1] - origine[1]),
         math.hypot(voisin_j5[0] - origine[0], voisin_j5[1] - origine[1]),
     )
+
