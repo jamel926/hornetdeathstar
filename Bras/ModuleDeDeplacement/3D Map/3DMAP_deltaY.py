@@ -78,7 +78,7 @@ noms = meilleur_poly.get_feature_names_out(["X", "Y"])
 
 print("\nEquation approchée :\n")
 
-equation = f"Z = {meilleur_modele.intercept_:.5f}"
+equation = f"∆Y = {meilleur_modele.intercept_:.5f}"
 
 for coef, nom in zip(meilleur_modele.coef_[1:], noms[1:]):
 
