@@ -98,7 +98,7 @@ from referencement import referencer
 
 from calibration_grille import lireAngles
 
-import test_calibrage_v2
+import test_calibrage_v2.py
 
 
 # =========================================================
