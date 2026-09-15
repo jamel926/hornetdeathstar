@@ -1,6 +1,38 @@
 from pymycobot import MyCobot280
 import time
+"""
+poses = [
+    # Pose 1 : "Bras en l'air"
+    [-50, 75, -120,  50,  35, 0],
 
+    # Pose 2 : "À gauche"
+    [ 50, 55,  -90, -50, -35, 0],
+
+    # Pose 3 : "Le robot complètement penché"
+    [-45, 25,  -140,  45, -40, 0],
+
+    # Pose 4 : "À droite"
+    [ 55, 70,  -80, -55,  40, 0],
+
+    # Pose 5 : "Victory !"
+    [  0, 80, -100,  60,  45, 0],
+
+    # Pose 6 : "Rock'n'roll"
+    [-55, 45,   70, -50,  40, 0],
+
+    # Pose 7 : "L'autre côté"
+    [ 55, 45,   70,  50, -40, 0],
+
+    # Pose 8 : "Le robot fou"
+    [  0, 30, -145, -60,  45, 0],
+
+    # Pose 9 : "Super héros"
+    [-40, 80,  -60,  60, -45, 0],
+
+    # Pose 10 : "TA-DAAAA !"
+    [  0, 70,   0,   0,  45, 0],
+]
+"""
 from PU_PositionInitiale import (
     connecterRobot,
     lireAngles,
