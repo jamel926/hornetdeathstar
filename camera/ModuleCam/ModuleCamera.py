@@ -15,7 +15,7 @@ class LaCamera:
         """Read and return ``(success, frame)`` from the camera."""
         return self.camera.read()
 
-    def read_latest(self, max_skip=1):
+    def read_latest(self, max_skip=3):
         for _ in range(max_skip):
             if not self.camera.grab():
                 break
