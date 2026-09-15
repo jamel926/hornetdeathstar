@@ -335,6 +335,18 @@ def afficherMenu():
     print(" q - Quitter")
     print("-----------------------------------------")
 
+def allumerPointeur(mc):
+    """Allume le pointeur rouge et retourne True si la commande est passee."""
+
+    try:
+        mc.set_pin_mode(33, 1)
+        time.sleep(0.5)
+        mc.set_digital_output(33, 0)
+        return True
+
+    except Exception as e:
+        print("Impossible d'allumer le pointeur :", e)
+        return False
 
 def main():
     """Console interactive pour relacher, deplacer a la main et reverrouiller le bras."""
@@ -354,7 +366,7 @@ def main():
         print()
         print("Robot indisponible, programme interrompu.")
         return 1
-
+    allumerPointeur(mc)
     # Vrai des que les moteurs ont ete relaches sans etre
     # reverrouilles : sert a refuser les mouvements.
     bras_relache = False

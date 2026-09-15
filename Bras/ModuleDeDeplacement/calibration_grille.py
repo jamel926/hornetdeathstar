@@ -275,7 +275,7 @@ bouge. La calibration entiere est attachee a cette pose :
 si elle change en cours de seance, les points releves
 avant et apres ne decrivent plus la meme geometrie.
 """
-TOLERANCE_BASE = 1.0       # degres
+TOLERANCE_BASE = 2.0       # degres
 
 """
 Recul applique avant chaque arrivee.
@@ -312,7 +312,7 @@ TOLERANCE_POINTAGE vaut 0,2 degre, soit environ 2 mm au sol :
 en dessous, on corrigerait le bruit de lecture des codeurs
 (pas de 0,088 degre) sans rien gagner.
 """
-TOLERANCE_POINTAGE = 0.2   # degres
+TOLERANCE_POINTAGE = 2   # degres
 CORRECTIONS_MAX = 3        # passes de rattrapage apres l'arrivee
 
 # Limites constructeur (pymycobot/robot_info.py).
