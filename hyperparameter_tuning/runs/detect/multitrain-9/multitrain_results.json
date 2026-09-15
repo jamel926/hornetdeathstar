@@ -1,0 +1,24 @@
+{
+  "results": {
+    "deathstar_dataset.v1i.yolov8": {
+      "metrics/precision(B)": 0.98468,
+      "metrics/recall(B)": 1.0,
+      "metrics/mAP50(B)": 0.995,
+      "metrics/mAP50-95(B)": 0.49103,
+      "val/box_loss": 1.71299,
+      "val/cls_loss": 3.27767,
+      "val/l1_loss": 0.0058,
+      "fitness": 0.49103
+    }
+  },
+  "mean": {
+    "metrics/precision(B)": 0.98468,
+    "metrics/recall(B)": 1.0,
+    "fitness": 0.49103,
+    "metrics/mAP50(B)": 0.995,
+    "val/cls_loss": 3.27767,
+    "val/l1_loss": 0.0058,
+    "val/box_loss": 1.71299,
+    "metrics/mAP50-95(B)": 0.49103
+  }
+}
