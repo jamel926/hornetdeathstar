@@ -275,7 +275,7 @@ bouge. La calibration entiere est attachee a cette pose :
 si elle change en cours de seance, les points releves
 avant et apres ne decrivent plus la meme geometrie.
 """
-TOLERANCE_BASE = 1.0       # degres
+TOLERANCE_BASE = 0.2       # degres
 
 """
 Recul applique avant chaque arrivee.
