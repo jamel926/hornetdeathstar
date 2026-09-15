@@ -1,10 +1,12 @@
 import cv2
+import time
+import matplotlib.pyplot as plt
 from ultralytics import YOLO
 from camera.ModuleCam.ModuleCamera import LaCamera
 from camera.ModuleCam.Calibrage import CoordenéesAuRobo, CoordonnerCalibrage
 from camera.Prediction.linear_prediction import PositionPredictor
 # Load YOLOv8 model
-model = YOLO("camera/IA/Model5 - V2/runs/detect/train/weights/best.pt")
+model = YOLO("src/camera/IA/Model5 - V2/runs/detect/train/weights/best.pt")
 
 distanceHaut = 12   # En cm
 distanceCote = 11
@@ -12,7 +14,11 @@ coffD = []
 coordonnerZero = []
 coordonnerReel = []
 
-Latence_est = 0.15 # En seconde
+ListeCoodPredic = []
+ListeCoodReel = []
+ListeTemps = []
+
+Latence_est = 0.3 # En seconde
 
 def detect_objects(frame):
     results = model(frame)
@@ -39,6 +45,8 @@ def detect_objects(frame):
 
 
 def main():
+    start_time = time.perf_counter()
+
     camera = LaCamera(camera_index=1)   # Open cam
     if camera.etatConnexionCamera():
         return()
@@ -69,7 +77,13 @@ def main():
         if position != ():
             coordonnerReel = CoordenéesAuRobo(coffD, coordonnerZero, position)
             predictor.add_detection(coordonnerReel)
-        coordonnerPredite = predictor.get_prediction(Latence_est)
+            coordonnerPredite = predictor.get_prediction(Latence_est)
+
+            elapsed_time = time.perf_counter() - start_time
+
+            ListeCoodPredic.append(coordonnerPredite)
+            ListeCoodReel.append(coordonnerReel)
+            ListeTemps.append(elapsed_time)
 
         cv2.imshow("AI Vision", frame)
         if detected_objects:
@@ -78,7 +92,23 @@ def main():
         if camera.quitterAffichage():           
             break
 
- 
+    #print(ListeTemps, ListeCoodReel, ListeCoodPredic)
+
+    fig, axs = plt.subplots(2)
+    fig.suptitle('Position in the time')     
+
+    axs[0].plot(ListeTemps, [coord[0] for coord in ListeCoodReel], label="Xreel")
+    axs[0].plot(ListeTemps, [coord[0] for coord in ListeCoodPredic], label="Xpredic")
+    axs[0].grid()
+    axs[0].legend()
+
+    axs[1].plot(ListeTemps, [coord[1] for coord in ListeCoodReel], label="Yreel")
+    axs[1].plot(ListeTemps, [coord[1] for coord in ListeCoodPredic], label="Ypredic")
+    axs[1].grid()
+    axs[1].legend() 
+
+    plt.show()
+
     camera.camera.release()
     cv2.destroyAllWindows()
 

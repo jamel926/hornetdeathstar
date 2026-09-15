@@ -9,14 +9,21 @@ def CoordonnerCalibrage(image, D1, D2):  #Fonction de calibrage pour definir un 
         
 
         # 2. Détecter les coins rouges (plages HSV pour le rouge)
-        lower_red1 = np.array([0, 100, 70])
-        upper_red1 = np.array([10, 255, 255])
-        lower_red2 = np.array([170, 100, 70])
+        lower_red1 = np.array([0, 90, 80])
+        upper_red1 = np.array([15, 255, 255])
+
+        lower_red2 = np.array([165, 90, 80])
         upper_red2 = np.array([180, 255, 255])
 
         mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
         mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
         mask = mask1 | mask2
+
+        cv2.imshow("Image originale", image)
+        cv2.imshow("Masque rouge", mask)
+
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
         # Trouver les contours des objets rouges pour extraire leurs centres (les coins)
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -24,7 +31,7 @@ def CoordonnerCalibrage(image, D1, D2):  #Fonction de calibrage pour definir un 
 
 
         for c in contours:
-            if cv2.contourArea(c) > 3:  # Filtrer le bruit
+            if cv2.contourArea(c) > 5:  # Filtrer le bruit
                 M = cv2.moments(c)
                 if M["m00"] != 0:
                     cX = int(M["m10"] / M["m00"])
@@ -59,8 +66,10 @@ def CoordonnerCalibrage(image, D1, D2):  #Fonction de calibrage pour definir un 
         else:
              return(None, None)
 
-def CoordenéesAuRobo(coef, CoordDorigine, CoordPointIA): #Fonction pour calculer les coordenées à envoyer au robo. Elle prends la liste des coeficients, la listedes coordenées de l'origine (x_0, y_0) et la liste de coordenées du point decteté par l'IA 
-        return [abs((CoordPointIA[0]-CoordDorigine[0]) / coef[0]), abs((CoordPointIA[1]-CoordDorigine[1]) / coef[1])]
+def CoordonneesAuRobo(coef, CoordDorigine, CoordPointIA): #Fonction pour calculer les coordenées à envoyer au robo. Elle prends la liste des coeficients, la listedes coordenées de l'origine (x_0, y_0) et la liste de coordenées du point decteté par l'IA 
+    x = ((CoordPointIA[0]-CoordDorigine[0]) / coef[0])
+    y = (CoordDorigine[1] - CoordPointIA[1]) / coef[1]
+    return (x, y)
             
    # # 4. Enlever tout ce qui est à l'extérieur (recadrage par perspective)
    # width = max(int(dist_top), int(dist_bottom))

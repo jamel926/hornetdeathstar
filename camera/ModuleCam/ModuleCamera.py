@@ -15,7 +15,7 @@ class LaCamera:
         """Read and return ``(success, frame)`` from the camera."""
         return self.camera.read()
 
-    def read_latest(self, max_skip=2):
+    def read_latest(self, max_skip=1):
         for _ in range(max_skip):
             if not self.camera.grab():
                 break
@@ -96,8 +96,6 @@ class LaCamera:
             if self.Screener():
                 self.enregistrerImage(frame)
 
-            if self.quitterAffichage():
-                break
         self.camera.release()
         cv2.destroyAllWindows()
 
