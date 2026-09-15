@@ -1307,20 +1307,46 @@ def connecterRobot(port=PORT, baudrate=BAUDRATE):
 
 
 def lireAngles(mc):
-    """Retourne les six angles mesures, ou None si la lecture est inexploitable."""
+    """Retourne les 6 angles du robot, ou None si la lecture est invalide."""
 
     try:
         angles = mc.get_angles()
-
     except Exception as e:
         print("Erreur de lecture des angles :", e)
         return None
 
-    if not angles or len(angles) != 6:
+    if isinstance(angles, int):
+        print(
+            "Lecture des angles invalide : get_angles() a retourne le code",
+            angles
+        )
         return None
 
-    return [float(a) for a in angles]
+    if not isinstance(angles, (list, tuple)):
+        print(
+            "Lecture des angles invalide : type retourne =",
+            type(angles).__name__
+        )
+        print("Valeur recue :", angles)
+        return None
 
+    if len(angles) != 6:
+        print(
+            "Lecture des angles invalide :",
+            len(angles),
+            "angles recus au lieu de 6."
+        )
+        print("Valeur recue :", angles)
+        return None
+
+    try:
+        angles_float = [float(a) for a in angles]
+    except (TypeError, ValueError) as e:
+        print("Angles recus mais impossibles a convertir :", angles)
+        print("Erreur :", e)
+        return None
+
+    return angles_float
 
 def allumerPointeur(mc):
     """Allume le pointeur rouge et retourne True si la commande est passee."""

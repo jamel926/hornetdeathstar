@@ -98,8 +98,19 @@ from referencement import referencer
 
 from calibration_grille import lireAngles
 
-import test_calibrage_v2.py
+# Permet d'importer le programme de Calibration_v2
+CHEMIN_V2 = os.path.abspath(
+    os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "Calibration_v2",
+    )
+)
 
+if CHEMIN_V2 not in sys.path:
+    sys.path.insert(0, CHEMIN_V2)
+
+import test_calibrage_v2
 
 # =========================================================
 # 2. LE DECALAGE DE LA SEANCE
