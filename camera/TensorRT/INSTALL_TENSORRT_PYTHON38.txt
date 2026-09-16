@@ -73,8 +73,11 @@ TRT_OSSPATH=~/trt_py38/TensorRT \
 EXT_PATH=~/trt_py38 \
 PYTHON_MAJOR_VERSION=3 \
 PYTHON_MINOR_VERSION=8 \
-TARGET_ARCHITECTURE=aarch64 \
+TARGET=aarch64 \
 ./build.sh 2>&1 | tee ~/trt_py38/build.log
+
+# ATTENTION : la variable s'appelle TARGET en TensorRT 8.0 (TARGET_ARCHITECTURE dans les versions
+# recentes). Sans elle, le fichier .whl est etiquete x86_64 et pip le refuse.
 
 ls build/dist/
 # Attendu : un fichier tensorrt-8.x.x-cp38-none-linux_aarch64.whl
