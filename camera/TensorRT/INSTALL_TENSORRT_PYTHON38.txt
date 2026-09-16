@@ -1,0 +1,99 @@
+=====================================================================
+ INSTALLER TENSORRT POUR PYTHON 3.8 SUR LA JETSON (Ubuntu 20.04)
+=====================================================================
+Remplace l'etape 1 de COMMANDES_JETSON.txt ("sudo apt install python3-libnvinfer").
+
+POURQUOI
+  La Jetson tourne sous Ubuntu 20.04 (Python 3.8), mais TensorRT vient de
+  JetPack 4.6, prevu pour Ubuntu 18.04 (Python 3.6). Le paquet
+  python3-libnvinfer exige Python < 3.7 : il ne s'installera jamais ici.
+  NE PAS FORCER apt (il proposerait de casser le Python du systeme).
+
+  La bibliotheque TensorRT (C++) est bien installee : seul le module Python
+  manque. On le compile pour Python 3.8 a partir du code publie par NVIDIA.
+
+  Le moteur .engine (etape 2 de COMMANDES_JETSON.txt) peut etre construit
+  pendant ce temps : trtexec n'a pas besoin de Python.
+
+Duree : environ 30 minutes. A faire HORS de tout environnement virtuel.
+Copier-coller les blocs un par un et verifier le resultat de chacun.
+
+
+---------------------------------------------------------------------
+ 1. Verifier si c'est deja installe
+---------------------------------------------------------------------
+deactivate 2>/dev/null; conda deactivate 2>/dev/null
+python3 -c "import tensorrt; print('DEJA INSTALLE', tensorrt.__version__)"
+
+# Si "DEJA INSTALLE" s'affiche : STOP, rien a faire, passer a l'etape 3 de COMMANDES_JETSON.txt.
+# Si "No module named tensorrt" : continuer.
+
+
+---------------------------------------------------------------------
+ 2. Relever la version de TensorRT installee
+---------------------------------------------------------------------
+dpkg -l | grep -E "libnvinfer|tensorrt" | awk '{print $2, $3}'
+
+TRT_VERSION=$(dpkg-query -W -f='${Version}' libnvinfer8 | cut -d. -f1,2)
+echo "Version TensorRT : $TRT_VERSION"
+
+# Attendu : 8.2 (ou 8.0). Si la variable est vide : libnvinfer8 n'est pas installe -> me prevenir.
+
+
+---------------------------------------------------------------------
+ 3. Installer les outils de compilation
+---------------------------------------------------------------------
+sudo apt install -y python3.8-dev python3-pip cmake git libnvinfer-dev
+
+# Si apt refuse l'un d'eux a cause d'une dependance : NE PAS FORCER, me prevenir.
+
+
+---------------------------------------------------------------------
+ 4. Telecharger les sources
+---------------------------------------------------------------------
+mkdir -p ~/trt_py38 && cd ~/trt_py38
+
+# Branche correspondant EXACTEMENT a la version installee (release/8.2 pour 8.2)
+git clone -b release/$TRT_VERSION --depth 1 https://github.com/NVIDIA/TensorRT.git
+git clone -b v2.6.2 --depth 1 https://github.com/pybind/pybind11.git
+
+# En-tetes Python 3.8 a l'endroit ou le script de NVIDIA les cherche
+mkdir -p python3.8/include && cp -r /usr/include/python3.8/* python3.8/include/
+
+ls ~/trt_py38
+# Attendu : TensorRT  pybind11  python3.8
+
+
+---------------------------------------------------------------------
+ 5. Compiler (15 a 25 min)
+---------------------------------------------------------------------
+cd ~/trt_py38/TensorRT/python
+
+TRT_OSSPATH=~/trt_py38/TensorRT \
+EXT_PATH=~/trt_py38 \
+PYTHON_MAJOR_VERSION=3 \
+PYTHON_MINOR_VERSION=8 \
+TARGET_ARCHITECTURE=aarch64 \
+./build.sh 2>&1 | tee ~/trt_py38/build.log
+
+ls build/dist/
+# Attendu : un fichier tensorrt-8.x.x-cp38-none-linux_aarch64.whl
+# En cas d'erreur : photo des 30 dernieres lignes de ~/trt_py38/build.log
+
+
+---------------------------------------------------------------------
+ 6. Installer et verifier
+---------------------------------------------------------------------
+python3 -m pip install --user build/dist/tensorrt-*.whl
+
+cd ~
+python3 -c "import tensorrt, numpy; print('TensorRT', tensorrt.__version__, '/ numpy', numpy.__version__)"
+
+# Attendu : TensorRT 8.2.x / numpy 1.17.4
+# Ensuite : reprendre COMMANDES_JETSON.txt a l'etape 2 (ou 3 si le .engine est deja construit).
+
+
+---------------------------------------------------------------------
+ Nettoyage (une fois que tout marche)
+---------------------------------------------------------------------
+rm -rf ~/trt_py38      # libere environ 500 Mo ; le module reste installe
