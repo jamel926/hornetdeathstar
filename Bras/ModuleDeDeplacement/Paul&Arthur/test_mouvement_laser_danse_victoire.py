@@ -1,42 +1,38 @@
-"""
-=========================================================
-ROBOT MYCOBOT 280 - MISE EN POSITION INITIALE
-=========================================================
-
-Objectif :
----------
-Amener le bras dans une pose de depart connue, exprimee
-directement en angles articulaires J1 a J6 (en degres).
-
-C'est le prealable de toute sequence de visee : tant que
-le robot n'est pas dans un repere connu, les coordonnees
-calculees par la stereovision ne veulent rien dire.
-
-Utilisation comme module :
--------------------------
-    from PU_PositionInitiale import connecterRobot, allerPositionInitiale
-
-    mc = connecterRobot()
-    if mc is not None and allerPositionInitiale(mc):
-        print("Bras pret")
-
-Utilisation en autonome :
-------------------------
-    python3 PU_PositionInitiale.py
-
-ATTENTION :
-----------
-Degager l'espace autour du bras et desarmer le laser
-avant toute execution.
-"""
-
-
-# =========================================================
-# 1. IMPORTS
-# =========================================================
-
-from pymycobot.mycobot280 import MyCobot280
+from pymycobot import MyCobot280
 import time
+"""
+poses = [
+    # Pose 1 : "Bras en l'air"
+    [-50, 75, -120,  50,  35, 0],
+
+    # Pose 2 : "À gauche"
+    [ 50, 55,  -90, -50, -35, 0],
+
+    # Pose 3 : "Le robot complètement penché"
+    [-45, 25,  -140,  45, -40, 0],
+
+    # Pose 4 : "À droite"
+    [ 55, 70,  -80, -55,  40, 0],
+
+    # Pose 5 : "Victory !"
+    [  0, 80, -100,  60,  45, 0],
+
+    # Pose 6 : "Rock'n'roll"
+    [-55, 45,   70, -50,  40, 0],
+
+    # Pose 7 : "L'autre côté"
+    [ 55, 45,   70,  50, -40, 0],
+
+    # Pose 8 : "Le robot fou"
+    [  0, 30, -145, -60,  45, 0],
+
+    # Pose 9 : "Super héros"
+    [-40, 80,  -60,  60, -45, 0],
+
+    # Pose 10 : "TA-DAAAA !"
+    [  0, 70,   0,   0,  45, 0],
+]
+"""
 from PU_PositionInitiale import (
     connecterRobot,
     lireAngles,
@@ -48,21 +44,19 @@ from PU_PositionInitiale import (
     VITESSE_INIT,
     TIMEOUT_INIT,
     ecartMaximal,
-    TOLERANCE_ANGLE
+    TOLERANCE_ANGLE,
+    PORT,
+    BAUDRATE
+)
+VITESSE_INIT=100
+
+from PU_PositionVisee2 import (
+    Verification_Angle_SECU,
+    aller_en_position_visee
 )
 
-def Mise_en_Position_Initiale():
-    """Sequence complete de mise en position initiale, avec confirmation de l'operateur."""
-
-    print()
-    print("=========================================")
-    print("   MISE EN POSITION INITIALE DU BRAS")
-    print("=========================================")
-    print()
-    print("ATTENTION : degager l'espace autour du bras")
-    print("et verifier que le laser est desarme.")
-    print()
-
+def Mise_en_Position_Initiale(vitesse=VITESSE_INIT, utilisateur = bool):
+    
     # -----------------------------------------------------
     # Connexion
     # -----------------------------------------------------
@@ -88,15 +82,16 @@ def Mise_en_Position_Initiale():
         return 0
 
     # -----------------------------------------------------
-    # Confirmation de l'operateur
+    # Confirmation de l'operateur si utilisateur = True
     # -----------------------------------------------------
+    if utilisateur==True :
+        print()
+        confirmation = input("Lancer la mise en position initiale ? (o/n) : ")
 
-    print()
-    confirmation = input("Lancer la mise en position initiale ? (o/n) : ")
-
-    if confirmation.lower() != "o":
-        print("Mise en position initiale annulee par l'operateur.")
-        return 1
+        if confirmation.lower() != "o":
+            print("Mise en position initiale annulee par l'operateur.")
+            return 1
+    
 
     # -----------------------------------------------------
     # Mouvement
@@ -105,7 +100,7 @@ def Mise_en_Position_Initiale():
     print()
     print("-----------------------------------------")
 
-    succes = allerPositionInitiale(mc)
+    succes = allerPositionInitiale(mc,ANGLES_POSITION_INITIALE,vitesse)
 
     print("-----------------------------------------")
 
@@ -133,32 +128,11 @@ def Mise_en_Position_Initiale():
 
     print("Echec de la mise en position initiale.")
     print("Les moteurs restent alimentes, le bras n'a pas ete relache.")
-    return
+    return 
 
-
-def Verification_Angle_SECU(angle):
-    J1,J2,J3,J4,J5,J6 = angle
-    if J4 > 95.0 : 
-        print("L'angle J4 voulu est hors zone reglementée")
-        print("changement de l'angle pour Angl_Max=95°")
-        J4=95.0
-    if J4 < 0.0 : 
-        print("L'angle J4 voulu est hors zone reglementée")
-        print("changement de l'angle pour Angl_Min=0°")
-        J4=0.0
-    if J5 <-80.0 : 
-        print("L'angle J5 voulu est hors zone reglementé")
-        print("changement de l'angle pour Angl_Max=-80°")
-        J5=-80
-    if J5 >80.0 : 
-        print("L'angle J5 voulu est hors zone reglementé")
-        print("changement de l'angle pour Angl_Max=80°")
-        J5=80.0
-    angle=(J1,J2,J3,J4,J5,J6)
-    return(angle)
-
-def aller_en_position_visee(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEOUT_INIT):
-    """Amene le bras dans la position initiale et confirme qu'il l'a bien atteinte."""
+    """
+    Amene le bras dans la position initiale et confirme qu'il l'a bien atteinte.
+    """
 
     if angles is None:
         angles = ANGLES_POSITION_INITIALE
@@ -202,7 +176,7 @@ def aller_en_position_visee(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEO
         print("Deplacement en cours (vitesse", int(vitesse), ")...")
 
         # La vitesse doit imperativement etre un entier
-        mc.sync_send_angles(angles, int(vitesse), timeout)
+        mc.send_angles(angles, int(vitesse), timeout)
 
     except Exception as e:
         print("Erreur pendant le deplacement :", e)
@@ -236,66 +210,123 @@ def aller_en_position_visee(mc, angles=None, vitesse=VITESSE_INIT, timeout=TIMEO
 
     print("Position initiale atteinte.")
     return True
-# =========================================================
-# 11. EXECUTION AUTONOME
-# =========================================================
+
+
+def danse_victoire(mc, vitesse=100):
+    """
+    Danse de victoire rapide et marrante.
+    Tous les moteurs sauf J6 bougent.
+    J6 reste a 0 degre.
+    """
+    print()
+    print("=========================================")
+    print("     DANSE DE VICTOIRE RAPIDE !!!")
+    print("=========================================")
+
+    # Choregraphie volontairement dynamique.
+    # J6 reste toujours a 0.
+    poses = [
+        [-35.0,  35.0, -125.0,  35.0,  25.0, 0.0],
+        [ 35.0,  65.0, -155.0, -35.0, -25.0, 0.0],
+        [-35.0,  65.0, -155.0,  35.0,  25.0, 0.0],
+        [ 35.0,  35.0, -125.0, -35.0, -25.0, 0.0],
+        [-25.0,  55.0, -145.0,  45.0,  20.0, 0.0],
+        [ 25.0,  55.0, -145.0, -45.0, -20.0, 0.0],
+        [  0.0,  45.0, -135.0,   0.0,   0.0, 0.0],
+    ]
+
+    try:
+        for tour in range(2):
+            print("Tour de danse", tour + 1, "/ 2")
+
+            for i, pose in enumerate(poses, start=1):
+                print("  Move", i, "->", pose)
+
+                # 100 = vitesse rapide.
+                mc.send_angles(pose, int(vitesse), 2)
+
+                # Temps tres court pour donner un effet dynamique.
+                time.sleep(0.25)
+
+        print("DANSE TERMINEE !!!")
+        return True
+
+    except Exception as e:
+        print("Erreur pendant la danse de victoire :", e)
+        return False
+
 
 def main():
-    """Sequence complete de mise en position initiale, avec confirmation de l'operateur."""
-    Mise_en_Position_Initiale()
+    mc = MyCobot280('/dev/ttyTHS1', 1000000)
+    # -----------------------------------------------------
+    # LASER
+    # -----------------------------------------------------
+    PIN = 33
 
-    VAL_J1 = float(input("Valeur de J1 voulue : "))
-    VAL_J2 = float(input("Valeur de J2 voulue : "))
-    VAL_J3 = float(input("Valeur de J3 voulue : "))
+    print("Configuration G33 en sortie")
+    mc.set_pin_mode(PIN, 0)
+    time.sleep(0.1)
+    print("G33 = 0 -> LASER ETEINT")
+    time.sleep(1)
+
+
+    Mise_en_Position_Initiale(100, True)
+    time.sleep(2)
+
     VAL_J4 = float(input("Valeur de J4 voulue : "))
     VAL_J5 = float(input("Valeur de J5 voulue : "))
-    VAL_J6 = float(input("Valeur de J6 voulue : "))
 
     ANGLES_POSITION_VISEES= [
-    VAL_J1,      # J1 - rotation de la base
-    VAL_J2,     # J2 - epaule
-    VAL_J3,   # J3 - coude
+    0.0,      # J1 - rotation de la base
+    50.0,     # J2 - epaule
+    -145.0,   # J3 - coude
     VAL_J4,     # J4 - poignet
     VAL_J5,      # J5 - inclinaison de l'outil
-    VAL_J6       # J6 - rotation finale de l'outil
+    0.0       # J6 - rotation finale de l'outil
 ]
+    
     ANGLES=Verification_Angle_SECU(ANGLES_POSITION_VISEES)
-
+    
     print()
     print("Position actuelle :", lireAngles(mc))
     print("Position visee    :", ANGLES_POSITION_VISEES)
 
-    print()
-    confirmation = input("Lancer la mise en position visée ? (o/n) : ")
-
-    if confirmation.lower() != "o":
-        print("Mise en position visee annulee par l'operateur.")
-        return 1
-
+    
     # -----------------------------------------------------
     # Mouvement
     # -----------------------------------------------------
     print()
     print("-----------------------------------------")
     print(ANGLES)
-    succes = aller_en_position_visee(mc,ANGLES)
+    succes = aller_en_position_visee(mc,ANGLES,50)
     print("-----------------------------------------")
+
+    
+    mc.set_pin_mode(PIN, 1)
+    time.sleep(0.1)
+    mc.set_digital_output(PIN, 0)
+    print("G33 = 1 -> LASER ALLUME")
+    time.sleep(5)
+
+    print("G33 = 0 -> LASER ETEINT")
+    mc.set_digital_output(PIN, 1)
+    time.sleep(1)
+
+    # Une fois le laser eteint, le robot fait sa danse de victoire.
+    danse_victoire(mc, 100)
+    time.sleep(1)
+
+    print("Fin du laser, merci bonsoir")
+
+
     # -----------------------------------------------------
-    # Compte rendu
+    # Remise en position initiale
     # -----------------------------------------------------
 
-    """
-    Les moteurs restent volontairement alimentes.
+    Mise_en_Position_Initiale(100, False)
 
-    Un power_off relacherait les servos et le bras
-    retomberait sous son propre poids : ce serait perdre
-    la position que l'on vient tout juste d'atteindre.
-    """
-
-    print()
     return 1
-
-
+    
 if __name__ == "__main__":
 
     try:

@@ -33,7 +33,7 @@ dossier_racine = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(dossier_racine)
 import PU_Pointage
 import PU_Tete
-import test_validation_pointage as validation
+import Bras.ModuleDeDeplacement.tests_files.test_validation_pointage as validation
 
 
 def impactSynthetique(j4, j5):

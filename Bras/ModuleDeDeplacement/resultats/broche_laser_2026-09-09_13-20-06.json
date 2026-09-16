@@ -1,0 +1,16 @@
+{
+  "essai": "identification de la broche de commande du laser",
+  "horodatage": "2026-09-09_13-20-06",
+  "duree_essai_s": 2.0,
+  "combinaisons": [
+    {
+      "nom": "doc electronique",
+      "methode": "set_digital_output",
+      "broche": 33,
+      "niveau_allume": 1,
+      "commentaire": "G33 sur la tete, logique directe (Annexes/Electronique/README.md)",
+      "erreur": null,
+      "allume_observe": true
+    }
+  ]
+}
