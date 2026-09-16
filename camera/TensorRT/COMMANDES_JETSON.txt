@@ -1,0 +1,75 @@
+=====================================================================
+ COMMANDES A LANCER SUR LA JETSON -- detection YOLO sur GPU (TensorRT)
+=====================================================================
+Explications detaillees et depannage : camera/TensorRT/README.md
+
+Le fichier best.onnx (480x640) et best_classes.json sont deja dans le depot,
+exportes depuis le PC. Il reste a construire le moteur sur CHAQUE robot.
+
+
+---------------------------------------------------------------------
+ 0. Recuperer le code
+---------------------------------------------------------------------
+cd ~/Documents/hornetdeathstar
+git pull
+
+# Verifier que les deux fichiers sont bien arrives :
+ls -lh camera/IA/Model5/runs/detect/train/weights/best.onnx camera/IA/Model5/runs/detect/train/weights/best_classes.json
+
+
+---------------------------------------------------------------------
+ 1. Verifier TensorRT (HORS de tout environnement)
+---------------------------------------------------------------------
+deactivate 2>/dev/null; conda deactivate 2>/dev/null
+
+/usr/bin/python3 -c "import tensorrt, numpy; print('TensorRT', tensorrt.__version__, '/ numpy', numpy.__version__)"
+
+# Si "No module named tensorrt" :  sudo apt install python3-libnvinfer
+# Si "No module named numpy"    :  sudo apt install python3-numpy
+
+
+---------------------------------------------------------------------
+ 2. Construire le moteur TensorRT (5 a 15 min, une seule fois par robot)
+---------------------------------------------------------------------
+# Fermer VS Code et le navigateur avant : la construction prend beaucoup de memoire.
+cd ~/Documents/hornetdeathstar
+chmod +x camera/TensorRT/construire_engine.sh
+./camera/TensorRT/construire_engine.sh camera/IA/Model5/runs/detect/train/weights/best.onnx
+
+# A la fin, noter la ligne "Throughput: ... qps" = images par seconde du GPU.
+# Resultat : camera/IA/Model5/runs/detect/train/weights/best.engine
+# NE PAS COMMITER le .engine (propre a chaque robot).
+# Si "Killed" : manque de memoire -> fermer des applications et relancer.
+
+
+---------------------------------------------------------------------
+ 3. (Optionnel) Tester le serveur seul
+---------------------------------------------------------------------
+/usr/bin/python3 camera/TensorRT/ServeurTensorRT.py --engine camera/IA/Model5/runs/detect/train/weights/best.engine
+
+# Attendu : "entree ... (1, 3, 480, 640)", "sortie ... (1, 5, 6300)", puis "pret sur 127.0.0.1:5005"
+# Arreter avec Ctrl+C.
+
+
+---------------------------------------------------------------------
+ 4. Lancer le programme
+---------------------------------------------------------------------
+cd ~/Documents/hornetdeathstar
+source .venv/bin/activate
+python3 main_trt.py
+
+# Le serveur TensorRT demarre tout seul (10 a 60 s au premier lancement).
+# Le temps de detection par image s'affiche en haut a gauche de la fenetre.
+
+
+---------------------------------------------------------------------
+ En cas de probleme
+---------------------------------------------------------------------
+# "Address already in use" : un ancien serveur tourne encore
+pkill -f ServeurTensorRT.py
+
+# "impossible de charger ... .engine" : moteur construit ailleurs -> refaire l'etape 2 sur ce robot
+
+# Apres un nouvel entrainement : refaire l'export sur PC
+#   python camera/TensorRT/export_onnx.py camera/IA/Model5/runs/detect/train/weights/best.pt
+# puis commit/push du .onnx et du _classes.json, puis etapes 0 et 2 ici.
