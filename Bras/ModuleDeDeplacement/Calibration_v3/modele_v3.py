@@ -68,9 +68,9 @@ Mesurer coute quelques secondes et se voit.
 
 Ce module ne recopie rien du v2 :
 --------------------------------
-Il ajoute Calibration_v2 au chemin et reexporte ses
-fonctions. Une seule definition de chaque formule dans tout
-le projet.
+Il reexporte les fonctions du noyau v2, qui vit dans le meme
+dossier depuis le 16/09. Une seule definition de chaque
+formule dans tout le projet.
 """
 
 
@@ -87,9 +87,13 @@ import math
 
 DOSSIER = os.path.dirname(os.path.abspath(__file__))
 
-DOSSIER_PARENT = os.path.dirname(DOSSIER)
+# Le v2 et les scripts d'origine ont ete rapatries dans ce
+# dossier le 16/09 : les trois chemins pointent donc au meme
+# endroit. Les noms sont conserves pour ne pas toucher au
+# reste du code, qui les utilise encore.
+DOSSIER_PARENT = DOSSIER
 
-DOSSIER_V2 = os.path.join(DOSSIER_PARENT, "Calibration_v2")
+DOSSIER_V2 = DOSSIER
 
 
 for chemin in (DOSSIER_V2, DOSSIER_PARENT):
@@ -102,9 +106,9 @@ for chemin in (DOSSIER_V2, DOSSIER_PARENT):
 # =========================================================
 
 """
-Le v3 ne tient pas tout seul : il a besoin du dossier
-Calibration_v2 a cote de lui, et des scripts d'origine un
-cran au dessus.
+Le v3 ne tient pas tout seul : il a besoin du noyau v2 et
+des scripts d'origine. Depuis le 16/09 ils ont ete rapatries
+dans ce dossier, qui est donc autonome.
 
 Sans cette verification, un fichier absent sort un
 "ModuleNotFoundError: No module named 'test_calibrage_v2'"
@@ -143,7 +147,7 @@ def diagnostiquerInstallation():
         "INSTALLATION INCOMPLETE",
         "=" * 57,
         "",
-        "Le v3 s'appuie sur Calibration_v2 et sur les scripts",
+        "Le v3 s'appuie sur le noyau v2 et sur les scripts",
         "d'origine. Ceci est introuvable :",
         "",
     ]
@@ -153,15 +157,14 @@ def diagnostiquerInstallation():
 
     lignes += [
         "",
-        "Dossiers ou on a cherche :",
-        "  v3      %s" % DOSSIER,
-        "  v2      %s" % DOSSIER_V2,
-        "  scripts %s" % DOSSIER_PARENT,
+        "Dossier ou on a cherche :",
+        "  %s" % DOSSIER,
         "",
         "A verifier, dans cet ordre :",
-        "  1. git pull   (le dossier Calibration_v2 est-il arrive ?)",
-        "  2. Calibration_v2 est-il bien A COTE de Calibration_v3,",
-        "     tous les deux dans Bras/ModuleDeDeplacement/ ?",
+        "  1. git pull   (les fichiers sont-ils arrives ?)",
+        "  2. depuis le 16/09 le noyau v2 et les scripts",
+        "     d'origine vivent DANS Calibration_v3 : tout doit",
+        "     etre dans ce seul dossier.",
         "  3. lancer depuis le dossier Calibration_v3 :",
         "         cd Bras/ModuleDeDeplacement/Calibration_v3",
         "         python3 test_calibrage_v3.py",
@@ -183,7 +186,7 @@ _diagnostic = diagnostiquerInstallation()
 if _diagnostic is not None:
     print(_diagnostic)
     raise ImportError(
-        "Calibration_v2 introuvable depuis %s -- voir le detail ci-dessus." % DOSSIER
+        "Noyau v2 introuvable depuis %s -- voir le detail ci-dessus." % DOSSIER
     )
 
 

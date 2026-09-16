@@ -98,15 +98,9 @@ from referencement import referencer
 
 from calibration_grille import lireAngles
 
-<<<<<<< HEAD
-# Permet d'importer le programme de Calibration_v2
-CHEMIN_V2 = os.path.abspath(
-    os.path.join(
-        os.path.dirname(__file__),
-        "..",
-        "Calibration_v2",
-    )
-)
+# Permet d'importer le programme de Calibration_v2, rapatrie
+# dans ce dossier le 16/09.
+CHEMIN_V2 = os.path.dirname(os.path.abspath(__file__))
 
 if CHEMIN_V2 not in sys.path:
     sys.path.insert(0, CHEMIN_V2)

@@ -17,7 +17,8 @@ Ce qu'il separe :
 Un "ModuleNotFoundError: No module named 'test_calibrage_v2'"
 peut vouloir dire trois choses tres differentes :
 
-    1. le dossier Calibration_v2 n'est pas la (git pull ?) ;
+    1. le fichier test_calibrage_v2.py n'est pas la
+       (git pull ?) ;
     2. il est la mais ailleurs que la ou on le cherche ;
     3. il est la, mais une erreur A L'INTERIEUR de
        test_calibrage_v2 empeche son chargement.
@@ -51,9 +52,13 @@ pouvoir dire pourquoi.
 
 DOSSIER = os.path.dirname(os.path.abspath(__file__))
 
-DOSSIER_PARENT = os.path.dirname(DOSSIER)
+# Le v2 et les scripts d'origine ont ete rapatries dans ce
+# dossier le 16/09 : les trois chemins pointent donc au meme
+# endroit. Les noms sont conserves pour ne pas toucher au
+# reste du code, qui les utilise encore.
+DOSSIER_PARENT = DOSSIER
 
-DOSSIER_V2 = os.path.join(DOSSIER_PARENT, "Calibration_v2")
+DOSSIER_V2 = DOSSIER
 
 
 for chemin in (DOSSIER_V2, DOSSIER_PARENT, DOSSIER):
@@ -178,8 +183,9 @@ def main():
         print()
         print("  A verifier, dans cet ordre :")
         print("    1. git pull")
-        print("    2. Calibration_v2 et Calibration_v3 doivent etre")
-        print("       COTE A COTE dans Bras/ModuleDeDeplacement/")
+        print("    2. depuis le 16/09 les fichiers du v2 et les")
+        print("       scripts d'origine vivent DANS Calibration_v3 :")
+        print("       tout doit etre dans ce seul dossier.")
         print("    3. lancer depuis le dossier du script :")
         print("         cd Bras/ModuleDeDeplacement/Calibration_v3")
         print("         python3 test_calibrage_v3.py")

@@ -18,9 +18,9 @@ tirs de validation du v2. Elle tient toujours.
 
 Ce qui est relu :
 ----------------
-    ../resultats/calibration_grille.csv              noeuds
-    ../resultats/validation_pointage_Calib_2.csv     tirs d'origine
-    ../Calibration_v2/resultats/tirs_v2_*.csv        seances v2
+    resultats/calibration_grille.csv                 noeuds
+    resultats/validation_pointage_Calib_2.csv        tirs d'origine
+    resultats/tirs_v2_*.csv                          seances v2
     resultats/tirs_v3_*.csv                          seances v3
 
 Ce qui est ecrit :
@@ -28,8 +28,8 @@ Ce qui est ecrit :
     resultats/modele_grille_v3.json
     resultats/grille_angles_v3.csv
 
-Le modele v2 n'est pas touche. Calibration_v2 continue de
-tourner sur le sien.
+Le modele v2 n'est pas touche : modele_grille_v2.json reste
+tel quel, le v3 ecrit dans son propre fichier.
 
 Utilisation :
 ------------

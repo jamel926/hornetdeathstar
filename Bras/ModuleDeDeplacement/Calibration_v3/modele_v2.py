@@ -56,7 +56,9 @@ import math
 
 DOSSIER = os.path.dirname(os.path.abspath(__file__))
 
-DOSSIER_PARENT = os.path.dirname(DOSSIER)
+# calibration_grille.py a ete rapatrie dans ce dossier le
+# 16/09 : le parent n'est plus la ou il faut chercher.
+DOSSIER_PARENT = DOSSIER
 
 if DOSSIER_PARENT not in sys.path:
     sys.path.insert(0, DOSSIER_PARENT)
@@ -80,8 +82,9 @@ DOSSIER_RESULTATS_V2 = os.path.join(DOSSIER, "resultats")
 CHEMIN_MODELE_V2 = os.path.join(DOSSIER_RESULTATS_V2, "modele_grille_v2.json")
 
 
-# Fichiers de la campagne d'origine, un cran au dessus.
-DOSSIER_RESULTATS_ORIGINE = os.path.join(DOSSIER_PARENT, "resultats")
+# Fichiers de la campagne d'origine, rapatries dans le meme
+# dossier resultats que le v2 et le v3 le 16/09.
+DOSSIER_RESULTATS_ORIGINE = os.path.join(DOSSIER, "resultats")
 
 CHEMIN_MODELE_ORIGINE = os.path.join(DOSSIER_RESULTATS_ORIGINE, "modele_grille.json")
 

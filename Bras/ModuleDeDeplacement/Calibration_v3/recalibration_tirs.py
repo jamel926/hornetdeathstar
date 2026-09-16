@@ -68,8 +68,8 @@ Resultat :
 
 Ce que le script lit :
 ---------------------
-    ../resultats/calibration_grille.csv            les noeuds
-    ../resultats/validation_pointage_Calib_2.csv   les tirs annotes
+    resultats/calibration_grille.csv               les noeuds
+    resultats/validation_pointage_Calib_2.csv      les tirs annotes
     resultats/tirs_v2_*.csv                        les seances
                                                    faites depuis
                                                    avec test_calibrage_v2.py
