@@ -69,7 +69,7 @@ def afficherPosition(ListeCoodPredic, ListeCoodReel, ListeTemps, affListe):
     plt.show()
 
 def verification(ListeLatence, zoneValiditer):
-    if len(ListeLatence) < 5:
+    if len(ListeLatence) < 3:
         return False
 
     lastEvent = ListeLatence[-5:]
@@ -101,7 +101,7 @@ def verification(ListeLatence, zoneValiditer):
 def main():
     start_time = time.perf_counter()
 
-    camera = LaCamera(camera_index=1)
+    camera = LaCamera(camera_index=0)
 
     if camera.etatConnexionCamera():
         return()

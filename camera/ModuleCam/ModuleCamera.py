@@ -15,7 +15,7 @@ class LaCamera:
         """Read and return ``(success, frame)`` from the camera."""
         return self.camera.read()
 
-    def read_latest(self, max_skip=3):
+    def read_latest(self, max_skip=5):
         for _ in range(max_skip):
             if not self.camera.grab():
                 break
@@ -124,5 +124,5 @@ class LaCamera:
         return(width,height)
 
 if __name__ == "__main__":
-    camera = LaCamera(camera_index=1)
+    camera = LaCamera(camera_index=0)
     camera.capturerImageDirect()
