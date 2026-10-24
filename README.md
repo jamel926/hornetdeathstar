@@ -55,6 +55,8 @@ Il est fortement recommandé de faire tourner ce projet dans un environnement vi
 └── README.md         # Documentation principale du projet
 ```
 
+> **Note (copie GitHub) :** trois fichiers trop lourds pour GitHub (> 100 Mo) ont été retirés de cette copie : `Annexes/Modeles_3D/Prise_Connecteur/cacheconnecteur.f3z`, `Detection_son/Projet_immersif.zip` et `Environement/hornetdeathstart_venv.zip`. Ils restent disponibles sur le dépôt GitLab d'origine de l'ENSICAEN.
+
 ## Utilisation
 
 Ouvrez votre dossier `hornetdeathstar` dans un terminal (assurez-vous d'avoir accordé les droits d'exécution au script) puis exécutez :
@@ -129,6 +131,8 @@ It is highly recommended to run this project in a Python virtual environment. Th
 ├── GUI_brouillon_vibecode.py # Graphical User Interface draft
 └── README.md         # Main project documentation
 ```
+
+> **Note (GitHub copy):** three files too large for GitHub (> 100 MB) were removed from this copy: `Annexes/Modeles_3D/Prise_Connecteur/cacheconnecteur.f3z`, `Detection_son/Projet_immersif.zip` and `Environement/hornetdeathstart_venv.zip`. They remain available in the original ENSICAEN GitLab repository.
 
 ## Usage
 
